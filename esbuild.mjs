@@ -193,15 +193,7 @@ const baseConfig = {
 	},
 }
 
-// Extension-specific configuration
-const extensionConfig = {
-	...baseConfig,
-	entryPoints: ["src/extension.ts"],
-	outfile: `${destDir}/extension.js`,
-	external: ["vscode"],
-}
-
-// Standalone-specific configuration
+// Standalone-specific configuration (CLI only)
 const standaloneConfig = {
 	...baseConfig,
 	entryPoints: ["src/standalone/cline-core.ts"],
@@ -222,7 +214,8 @@ const e2eBuildConfig = {
 }
 
 async function main() {
-	const config = standalone ? standaloneConfig : e2eBuild ? e2eBuildConfig : extensionConfig
+	// Always use standalone config for CLI-only build
+	const config = standalone ? standaloneConfig : e2eBuild ? e2eBuildConfig : standaloneConfig
 	const extensionCtx = await esbuild.context(config)
 	if (watch) {
 		await extensionCtx.watch()

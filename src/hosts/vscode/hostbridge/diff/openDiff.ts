@@ -1,5 +1,8 @@
-import { OpenDiffRequest, OpenDiffResponse } from "@/shared/proto/index.host"
-
-export async function openDiff(_request: OpenDiffRequest): Promise<OpenDiffResponse> {
-	throw new Error("diffService is not supported. Use the VscodeDiffViewProvider.")
+/**
+ * Opens a diff view
+ */
+export async function openDiff(): Promise<any> {
+  // For standalone CLI, diff functionality is not available
+  console.log("Diff functionality not available in CLI mode");
+  return {};
 }
