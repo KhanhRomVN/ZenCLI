@@ -1,6 +1,6 @@
 import { RouteObject } from 'react-router-dom'
 import MainLayout from '../layouts/MainLayout'
-import ClaudeChatPage from '../pages/ClaudeChatPage'
+import ChatPage from '../pages/Chat'
 
 export const routes: RouteObject[] = [
   {
@@ -8,8 +8,8 @@ export const routes: RouteObject[] = [
     element: <MainLayout />,
     children: [
       {
-        path: '',
-        element: <ClaudeChatPage />
+        path: '/',
+        element: <ChatPage />
       }
     ]
   }

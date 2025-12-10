@@ -9,7 +9,7 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="light" storageKey="stickyword-theme">
+      <ThemeProvider defaultTheme="dark" storageKey="stickyword-theme">
         <RouterProvider router={router} />
       </ThemeProvider>
     </QueryClientProvider>

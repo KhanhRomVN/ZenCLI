@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { PRESET_THEMES } from '../../constants/themePallate'
+import { createContext, useContext, useEffect, useState } from 'react'
+import { PRESET_THEMES } from '../../constants/theme-loader'
 
 type Theme = 'dark' | 'light' | 'system'
 
@@ -9,164 +9,113 @@ type ThemeProviderProps = {
   storageKey?: string
 }
 
-type ColorSettings = {
-  primary: string
-  background: string
-  textPrimary: string
-  textSecondary: string
-  border: string
-  borderHover: string
-  borderFocus: string
-  cardBackground: string
-  inputBackground: string
-  dialogBackground: string
-  dropdownBackground: string
-  dropdownItemHover: string
-  sidebarBackground: string
-  sidebarItemHover: string
-  sidebarItemFocus: string
-  buttonBg: string
-  buttonBgHover: string
-  buttonText: string
-  buttonBorder: string
-  buttonBorderHover: string
-  buttonSecondBg: string
-  buttonSecondBgHover: string
-  bookmarkItemBg: string
-  bookmarkItemText: string
-  drawerBackground: string
-  clockGradientFrom: string
-  clockGradientTo: string
-  cardShadow?: string
-  dialogShadow?: string
-  dropdownShadow?: string
-}
-
 type ThemeProviderState = {
   theme: Theme
   setTheme: (theme: Theme) => void
-  colorSettings: ColorSettings
-  setColorSettings: (settings: ColorSettings) => void
-}
-
-const getDefaultColorSettings = (themeType: 'light' | 'dark'): ColorSettings => {
-  const defaultPreset = PRESET_THEMES[themeType][0]
-  return {
-    primary: defaultPreset.primary,
-    background: defaultPreset.background,
-    textPrimary: defaultPreset.textPrimary || '#0f172a',
-    textSecondary: defaultPreset.textSecondary || '#475569',
-    border: defaultPreset.border || '#e2e8f0',
-    borderHover: defaultPreset.borderHover || '#cbd5e1',
-    borderFocus: defaultPreset.borderFocus || '#cbd5e1',
-    cardBackground: defaultPreset.cardBackground,
-    inputBackground: defaultPreset.inputBackground || defaultPreset.cardBackground,
-    dialogBackground: defaultPreset.dialogBackground || defaultPreset.cardBackground,
-    dropdownBackground: defaultPreset.dropdownBackground || defaultPreset.cardBackground,
-    dropdownItemHover: defaultPreset.dropdownItemHover || '#f8fafc',
-    sidebarBackground: defaultPreset.sidebarBackground || defaultPreset.cardBackground,
-    sidebarItemHover: defaultPreset.sidebarItemHover || '#f3f4f6',
-    sidebarItemFocus: defaultPreset.sidebarItemFocus || '#e5e7eb',
-    buttonBg: defaultPreset.buttonBg || defaultPreset.primary,
-    buttonBgHover: defaultPreset.buttonBgHover || defaultPreset.primary,
-    buttonText: defaultPreset.buttonText || '#ffffff',
-    buttonBorder: defaultPreset.buttonBorder || defaultPreset.primary,
-    buttonBorderHover: defaultPreset.buttonBorderHover || defaultPreset.primary,
-    buttonSecondBg: defaultPreset.buttonSecondBg || '#d4d4d4',
-    buttonSecondBgHover: defaultPreset.buttonSecondBgHover || '#b6b6b6',
-    bookmarkItemBg: defaultPreset.bookmarkItemBg || defaultPreset.cardBackground,
-    bookmarkItemText: defaultPreset.bookmarkItemText || defaultPreset.textPrimary || '#0f172a',
-    drawerBackground: defaultPreset.drawerBackground || defaultPreset.cardBackground,
-    clockGradientFrom: defaultPreset.clockGradientFrom || defaultPreset.primary,
-    clockGradientTo: defaultPreset.clockGradientTo || defaultPreset.primary,
-    cardShadow: defaultPreset.cardShadow,
-    dialogShadow: defaultPreset.dialogShadow,
-    dropdownShadow: defaultPreset.dropdownShadow
-  }
+  applyPresetTheme: (preset: any) => void
 }
 
 const initialState: ThemeProviderState = {
   theme: 'system',
   setTheme: () => null,
-  colorSettings: getDefaultColorSettings('light'),
-  setColorSettings: () => {}
+  applyPresetTheme: () => null
 }
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
 export function ThemeProvider({
   children,
-  defaultTheme = 'light',
+  defaultTheme = 'system',
   storageKey = 'vite-ui-theme',
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme)
-
-  // Get the effective theme (resolve 'system' to actual theme)
-  const getEffectiveTheme = useCallback((): 'light' | 'dark' => {
-    if (theme === 'system') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-    }
-    return theme
-  }, [theme])
-
-  // Initialize color settings based on theme
-  const [colorSettings, setColorSettings] = useState<ColorSettings>(() => {
-    return getDefaultColorSettings('light')
+  const [theme, setTheme] = useState<Theme>(() => {
+    const stored = localStorage.getItem(storageKey) as Theme
+    return stored || defaultTheme
   })
 
-  // Load theme from Electron storage on mount
+  // Load saved preset theme on mount
   useEffect(() => {
-    const loadTheme = async () => {
+    const savedPreset = localStorage.getItem(`${storageKey}-preset`)
+    if (savedPreset) {
       try {
-        if (!window.api) {
-          console.warn('[ThemeProvider] window.api is not available')
-          return
-        }
-
-        const savedTheme = await window.api.storage.get(storageKey)
-        if (savedTheme) {
-          setTheme(savedTheme as Theme)
-        }
-
-        const savedColors = await window.api.storage.get(`${storageKey}-colors`)
-        if (savedColors) {
-          setColorSettings(savedColors)
-        }
-      } catch (error) {
-        console.warn('Failed to load theme settings:', error)
+        const preset = JSON.parse(savedPreset)
+        applyCSSVariables(preset)
+      } catch (e) {
+        console.error('Failed to load saved preset theme', e)
       }
+    } else {
+      // Apply Default Dark theme on first load
+      const defaultDarkPreset = PRESET_THEMES.dark[0]
+      applyCSSVariables(defaultDarkPreset)
+      localStorage.setItem(`${storageKey}-preset`, JSON.stringify(defaultDarkPreset))
     }
-    loadTheme()
+  }, [])
+
+  // Auto-sync preset with latest changes in development
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      const syncInterval = setInterval(() => {
+        const savedPreset = localStorage.getItem(`${storageKey}-preset`)
+        if (savedPreset) {
+          try {
+            const preset = JSON.parse(savedPreset)
+            if (preset.name) {
+              const allPresets = [...PRESET_THEMES.light, ...PRESET_THEMES.dark]
+              const latestPreset = allPresets.find((p) => p.name === preset.name)
+              if (latestPreset) {
+                // Compare if colors have changed
+                const hasChanges = Object.keys(latestPreset).some(
+                  (key) =>
+                    key !== 'name' &&
+                    key !== 'icon' &&
+                    key !== 'description' &&
+                    latestPreset[key as keyof typeof latestPreset] !== preset[key]
+                )
+
+                if (hasChanges) {
+                  console.log(`[Theme Sync] Updating preset: ${preset.name}`)
+                  applyPresetTheme(latestPreset)
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Failed to sync preset theme', e)
+          }
+        }
+      }, 2000) // Check every 2 seconds in development
+
+      return () => clearInterval(syncInterval)
+    }
   }, [storageKey])
 
-  const updateColorSettings = useCallback(
-    async (settings: ColorSettings) => {
-      setColorSettings(settings)
-      try {
-        if (window.api) {
-          await window.api.storage.set(`${storageKey}-colors`, settings)
+  // Watch for changes in theme presets during development
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      const checkPresetUpdate = () => {
+        const savedPreset = localStorage.getItem(`${storageKey}-preset`)
+        if (savedPreset) {
+          try {
+            const preset = JSON.parse(savedPreset)
+            applyCSSVariables(preset)
+          } catch (e) {
+            console.error('Failed to reload preset theme', e)
+          }
         }
-      } catch (e) {
-        console.warn('Failed to save color settings:', e)
       }
-    },
-    [storageKey]
-  )
 
-  const applyTheme = useCallback(() => {
+      // Listen for custom event from HMR or manual refresh
+      window.addEventListener('theme-preset-reload', checkPresetUpdate)
+
+      return () => {
+        window.removeEventListener('theme-preset-reload', checkPresetUpdate)
+      }
+    }
+  }, [storageKey])
+
+  const applyCSSVariables = (preset: any) => {
     const root = window.document.documentElement
-
-    // Clear existing theme classes
-    root.classList.remove('light', 'dark')
-
-    const effectiveTheme = getEffectiveTheme()
-
-    // Add the effective theme class
-    root.classList.add(effectiveTheme)
-
-    // Apply color settings as CSS custom properties
-    const cssVarMap: Record<keyof ColorSettings, string> = {
+    const cssVarMap: Record<string, string> = {
       primary: '--primary',
       background: '--background',
       textPrimary: '--text-primary',
@@ -176,9 +125,14 @@ export function ThemeProvider({
       borderFocus: '--border-focus',
       cardBackground: '--card-background',
       inputBackground: '--input-background',
+      inputBorderDefault: '--input-border-default',
+      inputBorderHover: '--input-border-hover',
+      inputBorderFocus: '--input-border-focus',
       dialogBackground: '--dialog-background',
       dropdownBackground: '--dropdown-background',
       dropdownItemHover: '--dropdown-item-hover',
+      dropdownBorder: '--dropdown-border',
+      dropdownBorderHover: '--dropdown-border-hover',
       sidebarBackground: '--sidebar-background',
       sidebarItemHover: '--sidebar-item-hover',
       sidebarItemFocus: '--sidebar-item-focus',
@@ -196,55 +150,89 @@ export function ThemeProvider({
       clockGradientTo: '--clock-gradient-to',
       cardShadow: '--card-shadow',
       dialogShadow: '--dialog-shadow',
-      dropdownShadow: '--dropdown-shadow'
+      dropdownShadow: '--dropdown-shadow',
+      // Table variables
+      tableHeaderBg: '--table-header-bg',
+      tableHoverHeaderBg: '--table-hover-header-bg',
+      tableBodyBg: '--table-body-bg',
+      tableHoverItemBodyBg: '--table-hover-item-body-bg',
+      tableFocusItemBodyBg: '--table-focus-item-body-bg',
+      tableFooterBg: '--table-footer-bg',
+      tableHoverFooterBg: '--table-hover-footer-bg',
+      tableBorder: '--table-border',
+      // Tab variables
+      tabBackground: '--tab-background',
+      tabBorder: '--tab-border',
+      tabHoverBorder: '--tab-hover-border',
+      // TabItem variables
+      tabItemBackground: '--tab-item-background',
+      tabItemHoverBg: '--tab-item-hover-bg',
+      tabItemFocusBg: '--tab-item-focus-bg',
+      tabItemBorder: '--tab-item-border',
+      tabItemHoverBorder: '--tab-item-hover-border',
+      tabItemFocusBorder: '--tab-item-focus-border'
     }
-
-    Object.entries(colorSettings).forEach(([key, value]) => {
-      const cssVar = cssVarMap[key as keyof ColorSettings]
+    // Use tailwind property from new theme structure
+    const themeData = preset.tailwind || preset
+    Object.entries(themeData).forEach(([key, value]) => {
+      const cssVar = cssVarMap[key]
       if (cssVar && value) {
-        root.style.setProperty(cssVar, value)
+        root.style.setProperty(cssVar, value as string)
       }
     })
-  }, [colorSettings, getEffectiveTheme])
+  }
 
-  // Apply theme when theme or color settings change
-  useEffect(() => {
-    applyTheme()
-  }, [applyTheme])
-
-  // Listen for system theme changes only when theme is 'system'
-  useEffect(() => {
-    if (theme !== 'system') return
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const handleChange = () => {
-      // Force a re-render to update the effective theme
-      applyTheme()
+  const applyPresetTheme = (preset: any) => {
+    // Find the latest preset from PRESET_THEMES if name matches
+    let latestPreset = preset
+    if (preset.name) {
+      const allPresets = [...PRESET_THEMES.light, ...PRESET_THEMES.dark]
+      const foundPreset = allPresets.find((p) => p.name === preset.name)
+      if (foundPreset) {
+        latestPreset = foundPreset
+      }
     }
 
-    mediaQuery.addEventListener('change', handleChange)
-    return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [theme, applyTheme])
+    applyCSSVariables(latestPreset)
+    // Save preset with name for CodeBlock theme detection
+    const presetWithName = {
+      ...latestPreset,
+      name: latestPreset.name // Ensure name is saved
+    }
+    localStorage.setItem(`${storageKey}-preset`, JSON.stringify(presetWithName))
 
-  const handleSetTheme = useCallback(
-    async (newTheme: Theme) => {
-      try {
-        if (window.api) {
-          await window.api.storage.set(storageKey, newTheme)
-        }
-      } catch (e) {
-        console.warn('Failed to save theme:', e)
-      }
-      setTheme(newTheme)
-    },
-    [storageKey]
-  )
+    // Dispatch custom event to notify CodeBlock components
+    window.dispatchEvent(
+      new CustomEvent('theme-preset-changed', {
+        detail: { presetName: latestPreset.name }
+      })
+    )
+  }
+
+  useEffect(() => {
+    const root = window.document.documentElement
+
+    root.classList.remove('light', 'dark')
+
+    if (theme === 'system') {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light'
+
+      root.classList.add(systemTheme)
+      return
+    }
+
+    root.classList.add(theme)
+  }, [theme])
 
   const value = {
     theme,
-    setTheme: handleSetTheme,
-    colorSettings,
-    setColorSettings: updateColorSettings
+    setTheme: (theme: Theme) => {
+      localStorage.setItem(storageKey, theme)
+      setTheme(theme)
+    },
+    applyPresetTheme
   }
 
   return (
@@ -254,12 +242,11 @@ export function ThemeProvider({
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useTheme = () => {
   const context = useContext(ThemeProviderContext)
 
-  if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider')
-  }
+  if (context === undefined) throw new Error('useTheme must be used within a ThemeProvider')
 
   return context
 }

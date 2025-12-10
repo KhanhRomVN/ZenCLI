@@ -6,11 +6,10 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as fs from 'fs'
 import * as path from 'path'
 import { Pool } from 'pg'
-import { setupClaudeHandlers } from './claude/ipc-handlers'
+import { setupClaudeHandlers } from './providers/claude/ipc-handlers'
 
 let mainWindow: BrowserWindow | null = null
 let cloudDbPool: Pool | null = null
-let isCloudDbConnected: boolean = false
 
 // Storage file path
 const getStorageFilePath = () => {
