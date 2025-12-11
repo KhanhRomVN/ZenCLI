@@ -145,6 +145,31 @@ export default function TerminalPage({
     }
   }, [])
 
+  // Sync with messages prop changes (e.g., when "New Chat" is clicked)
+  useEffect(() => {
+    const term = xtermRef.current
+    if (!term) return
+
+    // If messages were cleared (New Chat), reset the terminal
+    if (initialMessages.length === 0 && localMessages.length > 0) {
+      // Clear terminal
+      term.clear()
+
+      // Reset local state
+      setLocalMessages([])
+      setLocalConversationId(undefined)
+      setLocalParentMessageUuid(undefined)
+
+      // Redisplay welcome message
+      term.writeln('\x1b[1;32m╔═══════════════════════════════════════════╗\x1b[0m')
+      term.writeln('\x1b[1;32m║         Welcome to ZenCLI Terminal        ║\x1b[0m')
+      term.writeln('\x1b[1;32m╚═══════════════════════════════════════════╝\x1b[0m')
+      term.writeln('')
+      term.writeln('Type your message in the textarea below and press Enter to chat.')
+      term.writeln('')
+    }
+  }, [initialMessages])
+
   const handleSend = async () => {
     if (!input.trim() || isStreaming) return
 

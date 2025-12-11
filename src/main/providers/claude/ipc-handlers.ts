@@ -31,16 +31,13 @@ export function setupClaudeHandlers() {
 
   // Login handler - opens Claude login window
   ipcMain.handle('claude:login', async () => {
-    console.log('[Auth] ========== LOGIN FLOW STARTED ==========')
     // Use a temporary in-memory session partition for login
     // This prevents SSO auto-login while preserving existing account data
     const loginPartition = 'login-temp'
-    console.log('[Auth] Using partition:', loginPartition)
 
     // Clear any previous session data to force a fresh login
     try {
       await session.fromPartition(loginPartition).clearStorageData()
-      console.log('[Auth] Cleared content of partition:', loginPartition)
     } catch (e) {
       console.error('[Auth] Failed to clear partition data:', e)
     }
@@ -56,18 +53,7 @@ export function setupClaudeHandlers() {
       title: 'Sign in to Claude'
     })
 
-    console.log('[Auth] Login window created')
     authWindow.loadURL(`${BASE_CLAUDE_URL}/login`)
-    console.log('[Auth] Loading URL:', `${BASE_CLAUDE_URL}/login`)
-
-    // Track URL changes
-    authWindow.webContents.on('did-navigate', (event, url) => {
-      console.log('[Auth] Navigated to:', url)
-    })
-
-    authWindow.webContents.on('did-navigate-in-page', (event, url) => {
-      console.log('[Auth] In-page navigation to:', url)
-    })
 
     const checkCookies = async (): Promise<{ success: boolean; error?: string } | null> => {
       // Get cookies from the temporary login session
@@ -75,19 +61,13 @@ export function setupClaudeHandlers() {
       const cookies = await loginSession.cookies.get({
         domain: '.claude.ai'
       })
-      console.log('[Auth] Checking cookies, found:', cookies.length, 'cookies')
       const sessionKey = cookies.find((c) => c.name === 'sessionKey')?.value
       const orgId = cookies.find((c) => c.name === 'lastActiveOrg')?.value
-      console.log('[Auth] sessionKey:', sessionKey ? 'FOUND' : 'NOT FOUND')
-      console.log('[Auth] orgId:', orgId ? orgId : 'NOT FOUND')
 
       if (sessionKey && orgId) {
-        console.log('[Auth] Got cookies from login window!')
-
         try {
           // Copy cookies from login session to default session FIRST
           // This ensures subsequent requests are authenticated
-          console.log('[Auth] Copying cookies to default session...')
           for (const cookie of cookies) {
             try {
               // Remove leading dot from domain if present
@@ -105,12 +85,8 @@ export function setupClaudeHandlers() {
                 httpOnly: cookie.httpOnly,
                 expirationDate: cookie.expirationDate
               })
-              console.log(`[Auth] Copied cookie: ${cookie.name}`)
-            } catch (error) {
-              console.error(`[Auth] Failed to copy cookie ${cookie.name}:`, error)
-            }
+            } catch (error) {}
           }
-          console.log('[Auth] All cookies copied successfully')
 
           // Fetch user info AFTER copying cookies
           let username = 'Unknown'
@@ -121,7 +97,6 @@ export function setupClaudeHandlers() {
             const sessionResponse = await makeRequest(`${BASE_CLAUDE_URL}/api/auth/session`)
             if (sessionResponse.status === 200 && sessionResponse.data) {
               const data = sessionResponse.data as any
-              console.log('[Claude Login] Got session data:', JSON.stringify(data))
 
               const account = data.account || {}
               const name = account.name
@@ -165,13 +140,9 @@ export function setupClaudeHandlers() {
             debugInfo = { ...debugInfo, fallbackOrgData: orgData }
           }
 
-          console.log(`[Claude Login] Username: ${username}, Email: ${userEmail}`)
-
           // Save account info
           await saveAccount(orgId, username, userEmail)
-          console.log('[Auth] Account saved successfully')
 
-          console.log('[Auth] ========== LOGIN FLOW SUCCESS ==========')
           return { success: true, debug: debugInfo }
         } catch (error) {
           return { success: false, error: String(error) }
@@ -184,17 +155,13 @@ export function setupClaudeHandlers() {
       let resolved = false // Flag to prevent double resolution
 
       authWindow.webContents.on('did-finish-load', async () => {
-        console.log('[Auth] Page finished loading')
         const result = await checkCookies()
         if (result && !resolved) {
           resolved = true
-          console.log('[Auth] Resolving from did-finish-load')
 
           // CRITICAL: Destroy window BEFORE resolving
-          console.log('[Auth] Destroying window before resolve...')
           if (!authWindow.isDestroyed()) {
             authWindow.destroy()
-            console.log('[Auth] Window destroyed successfully')
           }
 
           resolve(result)
@@ -203,21 +170,16 @@ export function setupClaudeHandlers() {
 
       const interval = setInterval(async () => {
         if (authWindow.isDestroyed()) {
-          console.log('[Auth] Window destroyed, stopping interval')
           clearInterval(interval)
           return
         }
         const result = await checkCookies()
         if (result && !resolved) {
           resolved = true
-          console.log('[Auth] Resolving from interval check')
           clearInterval(interval)
 
-          // CRITICAL: Destroy window BEFORE resolving to prevent redirect
-          console.log('[Auth] Destroying window before resolve...')
           if (!authWindow.isDestroyed()) {
             authWindow.destroy()
-            console.log('[Auth] Window destroyed successfully')
           }
 
           resolve(result)
@@ -225,14 +187,10 @@ export function setupClaudeHandlers() {
       }, 1000)
 
       authWindow.on('closed', () => {
-        console.log('[Auth] Window closed event triggered')
         clearInterval(interval)
         if (!resolved) {
           resolved = true
-          console.log('[Auth] ========== LOGIN FLOW CANCELLED ==========')
           resolve({ success: false, error: 'Window closed by user' })
-        } else {
-          console.log('[Auth] Already resolved, ignoring closed event')
         }
       })
     })
@@ -276,7 +234,6 @@ export function setupClaudeHandlers() {
     try {
       // Clear all cookies
       await session.defaultSession.clearStorageData({ storages: ['cookies'] })
-      console.log('[Claude] Logged out successfully')
       return { success: true }
     } catch (error) {
       console.error('[Claude] Failed to logout:', error)
@@ -471,6 +428,4 @@ export function setupClaudeHandlers() {
       }
     }
   })
-
-  console.log('[Claude] IPC handlers registered')
 }

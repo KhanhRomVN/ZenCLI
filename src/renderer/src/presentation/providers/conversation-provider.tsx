@@ -31,8 +31,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
   const loadConversationHistory = useCallback(async (convId: string) => {
     try {
-      console.log(`Loading conversation history for: ${convId}`)
-
       // Fetch conversation messages from API
       const result = await window.electron.ipcRenderer.invoke(
         'claude:get-conversation-messages',
@@ -48,10 +46,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
         // Load messages into state
         setMessages(result.messages)
-
-        console.log(`Loaded ${result.messages.length} messages for conversation ${convId}`)
       } else {
-        console.error('Failed to load conversation messages:', result.error)
         // Clear messages if loading failed
         setMessages([])
       }

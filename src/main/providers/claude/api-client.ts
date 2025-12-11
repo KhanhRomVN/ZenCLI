@@ -84,8 +84,6 @@ export async function saveAccount(orgId: string, name?: string, email?: string):
 
   s.set('accounts', accounts)
   s.set('activeAccountId', orgId)
-
-  console.log(`[Account] Saved account: ${orgId} (${name || 'unknown'})`)
 }
 
 /**
@@ -156,7 +154,6 @@ export async function switchAccount(accountId: string): Promise<boolean> {
     s.set('accounts', updatedAccounts)
     s.set('activeAccountId', accountId)
 
-    console.log(`[Account] Switched to account: ${accountId} (${account.name || 'unknown'})`)
     return true
   } catch (error) {
     console.error(`[Account] Failed to switch account:`, error)
@@ -193,7 +190,6 @@ export async function removeAccount(accountId: string): Promise<boolean> {
     }
   }
 
-  console.log(`[Account] Removed account: ${accountId}`)
   return true
 }
 
@@ -316,9 +312,6 @@ export async function prepareAttachmentPayload(
             return
           }
           const attachment = normalizeAttachmentResponse(parsed, file)
-          console.log(
-            `[API] Uploaded attachment: ${attachment.file_name} (${attachment.file_size} bytes)`
-          )
           resolve(attachment)
         } catch (err) {
           reject(

@@ -1,6 +1,6 @@
 import * as dotenv from 'dotenv'
 dotenv.config()
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as fs from 'fs'
@@ -151,6 +151,68 @@ function setupStorageHandlers() {
   })
 }
 
+// Setup IPC handlers for folder and file operations
+function setupFolderHandlers() {
+  // Select folder dialog
+  ipcMain.handle('dialog:select-folder', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        properties: ['openDirectory']
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true }
+      }
+
+      return { success: true, folderPath: result.filePaths[0] }
+    } catch (error) {
+      console.error('Error selecting folder:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // List files recursively in a folder
+  ipcMain.handle('fs:list-files', async (_event, folderPath: string) => {
+    try {
+      const files: string[] = []
+      const maxFiles = 1000 // Limit to prevent overwhelming
+      const ignoredDirs = ['node_modules', '.git', 'dist', 'build', '.next', 'out', 'coverage']
+
+      function walkDir(dir: string, depth: number = 0) {
+        if (depth > 10 || files.length >= maxFiles) return // Prevent too deep recursion
+
+        try {
+          const entries = fs.readdirSync(dir, { withFileTypes: true })
+
+          for (const entry of entries) {
+            if (files.length >= maxFiles) break
+
+            const fullPath = path.join(dir, entry.name)
+            const relativePath = path.relative(folderPath, fullPath)
+
+            if (entry.isDirectory()) {
+              // Skip ignored directories
+              if (ignoredDirs.includes(entry.name)) continue
+              walkDir(fullPath, depth + 1)
+            } else if (entry.isFile()) {
+              files.push(relativePath)
+            }
+          }
+        } catch (err) {
+          console.warn(`Cannot read directory ${dir}:`, err)
+        }
+      }
+
+      walkDir(folderPath)
+
+      return { success: true, files, totalFiles: files.length }
+    } catch (error) {
+      console.error('Error listing files:', error)
+      return { success: false, error: String(error), files: [] }
+    }
+  })
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 app.whenReady().then(async () => {
@@ -160,6 +222,7 @@ app.whenReady().then(async () => {
   // Setup IPC handlers
   setupStorageHandlers()
   setupClaudeHandlers()
+  setupFolderHandlers()
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

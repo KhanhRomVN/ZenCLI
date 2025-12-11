@@ -10,9 +10,12 @@ import {
   DropdownContent,
   DropdownItem
 } from '@khanhromvn/zenui'
-import { CornerDownRight, ChevronDown, X } from 'lucide-react'
+import { CornerDownRight, ChevronDown, X, Folder, FolderOpen } from 'lucide-react'
 import SelectAccountModal from './components/SelectAccountModal'
 import TerminalPage from '../Terminal'
+import { combinePrompts } from '../../../constants/prompts'
+import { parseClaudeResponse } from '../../../utils/response-parser'
+import { filterRelevantFiles } from '../../../utils/file-filter'
 
 interface Message {
   id: string
@@ -35,6 +38,8 @@ interface Tab {
   input: string // Per-tab input
   isStreaming: boolean // Per-tab streaming state
   messages: Message[] // Per-tab messages
+  selectedFolder?: string // Selected folder path for context
+  isFirstMessage: boolean // Track if this is the first message in conversation
 }
 
 interface Account {
@@ -77,18 +82,23 @@ export default function ChatPage() {
       try {
         const parsedTabs = JSON.parse(savedTabs)
         if (Array.isArray(parsedTabs) && parsedTabs.length > 0) {
-          // Ensure all tabs have messages array (migration for old saved data)
+          // Ensure all tabs have required fields (migration for old saved data)
           const migratedTabs = parsedTabs.map((tab) => ({
             ...tab,
-            messages: tab.messages || []
+            messages: tab.messages || [],
+            // Set isFirstMessage based on whether tab has messages
+            // If tab has messages, it's not first message anymore
+            // If tab is empty, it should be first message
+            isFirstMessage:
+              tab.isFirstMessage !== undefined
+                ? tab.isFirstMessage
+                : (tab.messages || []).length === 0
           }))
           setTabs(migratedTabs)
           setActiveTabId(savedActiveTabId)
-          console.log(`[Tab Restore] Loaded ${migratedTabs.length} tabs from localStorage`)
 
           // Load conversations for each unique account
           const uniqueAccountIds = [...new Set(migratedTabs.map((tab) => tab.accountId))]
-          console.log('[Tab Restore] Loading conversations for accounts:', uniqueAccountIds)
           uniqueAccountIds.forEach((accountId) => {
             loadConversationsForAccount(accountId)
           })
@@ -176,12 +186,13 @@ export default function ChatPage() {
           timestamp: Date.now(),
           input: '',
           isStreaming: false,
-          messages: []
+          messages: [],
+          isFirstMessage: true
         }
         setTabs([newTab])
         setActiveTabId('1')
         // Load conversations for this account
-        console.log('[Init] Loading conversations for initial account:', id)
+
         loadConversationsForAccount(id)
       }
     } catch (error) {
@@ -191,21 +202,19 @@ export default function ChatPage() {
 
   const loadConversationsForAccount = async (accountId: string) => {
     try {
-      console.log('[Conversations] Loading conversations for account:', accountId)
       const result = await window.electron.ipcRenderer.invoke('claude:get-conversations')
-      console.log('[Conversations] API result:', result)
       if (result.success && Array.isArray(result.conversations)) {
         const convList = result.conversations.slice(0, 20).map((c: any) => ({
           uuid: c.uuid,
           name: c.name || 'Untitled conversation'
         }))
-        console.log('[Conversations] Processed conversation list:', convList)
+
         setConversations((prev) => {
           const updated = {
             ...prev,
             [accountId]: convList
           }
-          console.log('[Conversations] Updated conversations state:', updated)
+
           return updated
         })
       } else {
@@ -220,7 +229,13 @@ export default function ChatPage() {
     setTabs((prev) =>
       prev.map((tab) =>
         tab.id === tabId
-          ? { ...tab, conversationId, messages: [], parentMessageUuid: undefined }
+          ? {
+              ...tab,
+              conversationId,
+              messages: [],
+              parentMessageUuid: undefined,
+              isFirstMessage: false
+            }
           : tab
       )
     )
@@ -232,7 +247,13 @@ export default function ChatPage() {
     setTabs((prev) =>
       prev.map((tab) =>
         tab.id === tabId
-          ? { ...tab, conversationId: undefined, parentMessageUuid: undefined, messages: [] }
+          ? {
+              ...tab,
+              conversationId: undefined,
+              parentMessageUuid: undefined,
+              messages: [],
+              isFirstMessage: true
+            }
           : tab
       )
     )
@@ -258,7 +279,8 @@ export default function ChatPage() {
               username: account.name,
               conversationId: undefined,
               parentMessageUuid: undefined,
-              messages: []
+              messages: [],
+              isFirstMessage: true
             }
           : tab
       )
@@ -319,38 +341,23 @@ export default function ChatPage() {
 
   const handleAddAccount = async () => {
     try {
-      console.log('[Frontend] Starting add account flow...')
       const result = await window.electron.ipcRenderer.invoke('claude:login')
-      console.log('[Frontend] Login result:', result)
-      if (result.debug) {
-        console.log('[Frontend] Login Debug Info:', result.debug)
-      }
 
       if (result.success) {
         // Reload accounts list to get the newly added account
-        console.log('[Frontend] Reloading accounts...')
         await loadAccounts()
 
         // Get fresh accounts list
         const accountsResult = await window.electron.ipcRenderer.invoke('claude:get-accounts')
-        console.log('[Frontend] Accounts result:', accountsResult)
 
         if (accountsResult.success && accountsResult.accounts) {
-          console.log('[Frontend] Total accounts:', accountsResult.accounts.length)
           // Find the newly added account (last one in the list)
           const newAccount = accountsResult.accounts[accountsResult.accounts.length - 1]
-          console.log('[Frontend] New account:', newAccount)
 
           // Check if this account is already in use
-          console.log(
-            '[Frontend] Current tabs:',
-            tabs.map((t) => ({ id: t.id, accountId: t.accountId }))
-          )
           const isDuplicate = tabs.some((tab) => tab.accountId === newAccount.id)
-          console.log('[Frontend] Is duplicate?', isDuplicate)
 
           if (!isDuplicate) {
-            console.log('[Frontend] Creating new tab for account:', newAccount.id)
             handleSelectAccount(newAccount.id)
           } else {
             console.warn('[Tab] Newly logged in account is already in use')
@@ -360,8 +367,6 @@ export default function ChatPage() {
           console.error('[Frontend] Failed to get accounts or no accounts returned')
         }
         setShowAccountModal(false)
-      } else {
-        console.log('[Frontend] Login was not successful:', result.error)
       }
     } catch (error) {
       console.error('Failed to add account:', error)
@@ -417,14 +422,14 @@ export default function ChatPage() {
       timestamp: Date.now(),
       input: '',
       isStreaming: false,
-      messages: []
+      messages: [],
+      isFirstMessage: true
     }
 
     setTabs([...tabs, newTab])
     setActiveTabId(newId)
 
     // Load conversations for the new account
-    console.log('[AddTab] Loading conversations for new tab account:', account.id)
     loadConversationsForAccount(account.id)
     setShowAccountModal(false)
   }
@@ -450,6 +455,21 @@ export default function ChatPage() {
     )
   }
 
+  const handleSelectFolder = async () => {
+    try {
+      const result = await window.electron.ipcRenderer.invoke('dialog:select-folder')
+      if (result.success && result.folderPath) {
+        setTabs((prev) =>
+          prev.map((tab) =>
+            tab.id === activeTabId ? { ...tab, selectedFolder: result.folderPath } : tab
+          )
+        )
+      }
+    } catch (error) {
+      console.error('Failed to select folder:', error)
+    }
+  }
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
@@ -461,18 +481,59 @@ export default function ChatPage() {
   const handleSend = async () => {
     if (!activeTab || !activeTab.input.trim() || activeTab.isStreaming) return
 
+    const userMessageContent = activeTab.input.trim()
+    // CRITICAL: Capture isFirstMessage BEFORE any state updates
+    const isFirstMessage = activeTab.isFirstMessage
+
+    // Build enhanced prompt with context
+    let enhancedPrompt = userMessageContent
+
+    // Add file context if folder is selected
+    if (activeTab.selectedFolder) {
+      try {
+        const fileListResult = await window.electron.ipcRenderer.invoke(
+          'fs:list-files',
+          activeTab.selectedFolder
+        )
+
+        if (fileListResult.success && fileListResult.files.length > 0) {
+          // Filter files based on relevance to user message
+          const relevantFiles = filterRelevantFiles(fileListResult.files, userMessageContent)
+
+          const fileContext = `\n\n<project_context>\nProject folder: ${activeTab.selectedFolder}\nRelevant files (${relevantFiles.length} of ${fileListResult.totalFiles} total):\n${relevantFiles.join('\n')}\n</project_context>`
+          enhancedPrompt = userMessageContent + fileContext
+        }
+      } catch (error) {
+        console.error('[handleSend] Failed to get file list:', error)
+      }
+    }
+
+    // Add system prompts ONLY for first message
+    let finalPrompt = enhancedPrompt
+    if (isFirstMessage) {
+      const systemPrompt = combinePrompts()
+      finalPrompt = `${systemPrompt}\n\n${enhancedPrompt}`
+    }
+
+    // Create user message for UI (only show user's input, not the full prompt)
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: activeTab.input.trim(),
+      content: userMessageContent,
       timestamp: Date.now()
     }
 
-    // Add user message to active tab's messages
+    // Add user message to active tab's messages and mark as not first message
     setTabs((prev) =>
       prev.map((tab) =>
         tab.id === activeTabId
-          ? { ...tab, messages: [...tab.messages, userMessage], input: '', isStreaming: true }
+          ? {
+              ...tab,
+              messages: [...tab.messages, userMessage],
+              input: '',
+              isStreaming: true,
+              isFirstMessage: false
+            }
           : tab
       )
     )
@@ -521,6 +582,9 @@ export default function ChatPage() {
       )
 
       const handleStreamChunk = (_event: any, data: { text: string; steps: Step[] }) => {
+        // Parse response to extract content from bash blocks
+        const parsedContent = parseClaudeResponse(data.text)
+
         // Update last message in active tab's messages
         setTabs((prev) =>
           prev.map((tab) => {
@@ -529,7 +593,7 @@ export default function ChatPage() {
             if (updatedMessages.length > 0) {
               updatedMessages[updatedMessages.length - 1] = {
                 ...updatedMessages[updatedMessages.length - 1],
-                content: data.text
+                content: parsedContent
               }
             }
             return { ...tab, messages: updatedMessages }
@@ -540,9 +604,9 @@ export default function ChatPage() {
       window.electron.ipcRenderer.on('claude:stream-chunk', handleStreamChunk)
 
       await window.electron.ipcRenderer.invoke('claude:send-message', {
-        conversationId,
-        parentMessageUuid,
-        message: userMessage.content
+        conversationId: conversationId!,
+        parentMessageUuid: parentMessageUuid!,
+        message: finalPrompt // Send optimized prompt (full on first, context only after)
       })
 
       window.electron.ipcRenderer.removeListener('claude:stream-chunk', handleStreamChunk)
@@ -646,18 +710,6 @@ export default function ChatPage() {
                         ? conversations[tab.accountId]?.find((c) => c.uuid === tab.conversationId)
                             ?.name || 'Current conversation'
                         : 'New conversation'
-                      console.log(
-                        '[ConvDropdown] Tab:',
-                        tab.id,
-                        'ConvId:',
-                        tab.conversationId,
-                        'AccountId:',
-                        tab.accountId,
-                        'Title:',
-                        convTitle,
-                        'Conversations:',
-                        conversations[tab.accountId]
-                      )
                       return convTitle
                     })()}
                   </span>
@@ -764,6 +816,24 @@ export default function ChatPage() {
               <div className="w-full p-2 space-y-3 border-t border-border-default bg-card-background">
                 {/* Badges Row */}
                 <div className="flex items-center gap-2">
+                  {/* Folder Badge */}
+                  <button
+                    onClick={handleSelectFolder}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors ${
+                      tab.selectedFolder
+                        ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50'
+                        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50'
+                    }`}
+                    title={tab.selectedFolder || 'No folder selected'}
+                  >
+                    {tab.selectedFolder ? <FolderOpen size={12} /> : <Folder size={12} />}
+                    <span className="max-w-[150px] truncate">
+                      {tab.selectedFolder
+                        ? tab.selectedFolder.split('/').pop() || tab.selectedFolder
+                        : 'No Folder'}
+                    </span>
+                  </button>
+
                   {/* Model Selector Dropdown */}
                   <Dropdown>
                     <DropdownTrigger>
