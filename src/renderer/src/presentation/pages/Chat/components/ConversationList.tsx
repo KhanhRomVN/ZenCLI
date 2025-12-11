@@ -1,4 +1,4 @@
-import { useConversation } from '../providers/conversation-provider'
+import { useConversation } from '../../../providers/conversation-provider'
 
 export default function ConversationList() {
   const {

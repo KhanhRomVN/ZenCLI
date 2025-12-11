@@ -65,13 +65,10 @@ export function ThemeProvider({
               const latestPreset = allPresets.find((p) => p.name === preset.name)
               if (latestPreset) {
                 // Compare if colors have changed
-                const hasChanges = Object.keys(latestPreset).some(
-                  (key) =>
-                    key !== 'name' &&
-                    key !== 'icon' &&
-                    key !== 'description' &&
-                    latestPreset[key as keyof typeof latestPreset] !== preset[key]
-                )
+                // Compare if colors have changed using JSON.stringify for deep comparison
+                const hasChanges =
+                  JSON.stringify(latestPreset.tailwind) !== JSON.stringify(preset.tailwind) ||
+                  JSON.stringify(latestPreset.monaco) !== JSON.stringify(preset.monaco)
 
                 if (hasChanges) {
                   console.log(`[Theme Sync] Updating preset: ${preset.name}`)

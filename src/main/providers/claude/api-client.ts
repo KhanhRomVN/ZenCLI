@@ -50,7 +50,7 @@ export async function getAnonymousId(): Promise<string> {
 /**
  * Save account information after successful login
  */
-export async function saveAccount(orgId: string, email?: string, name?: string): Promise<void> {
+export async function saveAccount(orgId: string, name?: string, email?: string): Promise<void> {
   const cookies = await session.defaultSession.cookies.get({
     domain: '.claude.ai'
   })
@@ -68,8 +68,8 @@ export async function saveAccount(orgId: string, email?: string, name?: string):
     id: orgId,
     orgId,
     sessionKey,
-    email,
     name,
+    email,
     addedAt: existingIndex >= 0 ? accounts[existingIndex].addedAt : Date.now(),
     lastUsed: Date.now()
   }
@@ -85,7 +85,7 @@ export async function saveAccount(orgId: string, email?: string, name?: string):
   s.set('accounts', accounts)
   s.set('activeAccountId', orgId)
 
-  console.log(`[Account] Saved account: ${orgId} (${email || 'unknown'})`)
+  console.log(`[Account] Saved account: ${orgId} (${name || 'unknown'})`)
 }
 
 /**
@@ -156,7 +156,7 @@ export async function switchAccount(accountId: string): Promise<boolean> {
     s.set('accounts', updatedAccounts)
     s.set('activeAccountId', accountId)
 
-    console.log(`[Account] Switched to account: ${accountId} (${account.email || 'unknown'})`)
+    console.log(`[Account] Switched to account: ${accountId} (${account.name || 'unknown'})`)
     return true
   } catch (error) {
     console.error(`[Account] Failed to switch account:`, error)
@@ -338,11 +338,19 @@ export async function prepareAttachmentPayload(
 }
 
 // Set common headers on a request
-async function setCommonHeaders(request: Electron.ClientRequest): Promise<void> {
+async function setCommonHeaders(request: Electron.ClientRequest, method: string): Promise<void> {
   request.setHeader('accept', 'application/json, text/event-stream')
-  request.setHeader('content-type', 'application/json')
+  request.setHeader('accept-language', 'en-US,en;q=0.9')
+
+  // Only set content-type for non-GET requests
+  if (method.toUpperCase() !== 'GET') {
+    request.setHeader('content-type', 'application/json')
+  }
+
   request.setHeader('origin', BASE_URL)
+  request.setHeader('referer', BASE_URL)
   request.setHeader('anthropic-client-platform', 'web_claude_ai')
+  request.setHeader('anthropic-client-version', '1.0.0')
   request.setHeader('anthropic-device-id', await getDeviceId())
   request.setHeader('anthropic-anonymous-id', await getAnonymousId())
   request.setHeader(
@@ -364,7 +372,7 @@ export async function makeRequest(
       useSessionCookies: true
     })
 
-    await setCommonHeaders(request)
+    await setCommonHeaders(request, method)
 
     let responseData = ''
     let statusCode = 0
@@ -515,7 +523,7 @@ export async function stopResponse(orgId: string, conversationId: string): Promi
       useSessionCookies: true
     })
 
-    await setCommonHeaders(request)
+    await setCommonHeaders(request, 'POST')
 
     request.on('response', (response) => {
       if (response.statusCode !== 200 && response.statusCode !== 204) {

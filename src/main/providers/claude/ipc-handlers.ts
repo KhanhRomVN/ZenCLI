@@ -31,12 +31,18 @@ export function setupClaudeHandlers() {
 
   // Login handler - opens Claude login window
   ipcMain.handle('claude:login', async () => {
+    console.log('[Auth] ========== LOGIN FLOW STARTED ==========')
+    // Use a temporary in-memory session partition for login
+    // This prevents SSO auto-login while preserving existing account data
+    const loginPartition = 'login-temp'
+    console.log('[Auth] Using partition:', loginPartition)
+
+    // Clear any previous session data to force a fresh login
     try {
-      // Clear session cookies explicitly to allow fresh login
-      await session.defaultSession.cookies.remove('https://claude.ai', 'sessionKey')
-      await session.defaultSession.cookies.remove('https://claude.ai', 'lastActiveOrg')
-    } catch (error) {
-      console.error('[Claude Login] Failed to clear cookies:', error)
+      await session.fromPartition(loginPartition).clearStorageData()
+      console.log('[Auth] Cleared content of partition:', loginPartition)
+    } catch (e) {
+      console.error('[Auth] Failed to clear partition data:', e)
     }
 
     const authWindow = new BrowserWindow({
@@ -44,29 +50,129 @@ export function setupClaudeHandlers() {
       height: 700,
       webPreferences: {
         nodeIntegration: false,
-        contextIsolation: true
+        contextIsolation: true,
+        partition: loginPartition // Temporary in-memory session
       },
       title: 'Sign in to Claude'
     })
 
+    console.log('[Auth] Login window created')
     authWindow.loadURL(`${BASE_CLAUDE_URL}/login`)
+    console.log('[Auth] Loading URL:', `${BASE_CLAUDE_URL}/login`)
 
-    // Check for successful authentication
+    // Track URL changes
+    authWindow.webContents.on('did-navigate', (event, url) => {
+      console.log('[Auth] Navigated to:', url)
+    })
+
+    authWindow.webContents.on('did-navigate-in-page', (event, url) => {
+      console.log('[Auth] In-page navigation to:', url)
+    })
+
     const checkCookies = async (): Promise<{ success: boolean; error?: string } | null> => {
-      const cookies = await session.defaultSession.cookies.get({
+      // Get cookies from the temporary login session
+      const loginSession = session.fromPartition(loginPartition)
+      const cookies = await loginSession.cookies.get({
         domain: '.claude.ai'
       })
+      console.log('[Auth] Checking cookies, found:', cookies.length, 'cookies')
       const sessionKey = cookies.find((c) => c.name === 'sessionKey')?.value
       const orgId = cookies.find((c) => c.name === 'lastActiveOrg')?.value
+      console.log('[Auth] sessionKey:', sessionKey ? 'FOUND' : 'NOT FOUND')
+      console.log('[Auth] orgId:', orgId ? orgId : 'NOT FOUND')
 
       if (sessionKey && orgId) {
+        console.log('[Auth] Got cookies from login window!')
+
         try {
-          // Fetch user info
-          const response = await makeRequest(`${BASE_CLAUDE_URL}/api/organizations/${orgId}`)
-          const orgData = response.data as any
-          await saveAccount(orgId, orgData?.name || 'Unknown', orgData?.display_name)
-          authWindow.close()
-          return { success: true }
+          // Copy cookies from login session to default session FIRST
+          // This ensures subsequent requests are authenticated
+          console.log('[Auth] Copying cookies to default session...')
+          for (const cookie of cookies) {
+            try {
+              // Remove leading dot from domain if present
+              const domain = cookie.domain.startsWith('.')
+                ? cookie.domain.substring(1)
+                : cookie.domain
+
+              await session.defaultSession.cookies.set({
+                url: `https://${domain}${cookie.path}`,
+                name: cookie.name,
+                value: cookie.value,
+                domain: cookie.domain, // Keep original domain format
+                path: cookie.path,
+                secure: cookie.secure,
+                httpOnly: cookie.httpOnly,
+                expirationDate: cookie.expirationDate
+              })
+              console.log(`[Auth] Copied cookie: ${cookie.name}`)
+            } catch (error) {
+              console.error(`[Auth] Failed to copy cookie ${cookie.name}:`, error)
+            }
+          }
+          console.log('[Auth] All cookies copied successfully')
+
+          // Fetch user info AFTER copying cookies
+          let username = 'Unknown'
+          let userEmail = ''
+          let debugInfo = {}
+
+          try {
+            const sessionResponse = await makeRequest(`${BASE_CLAUDE_URL}/api/auth/session`)
+            if (sessionResponse.status === 200 && sessionResponse.data) {
+              const data = sessionResponse.data as any
+              console.log('[Claude Login] Got session data:', JSON.stringify(data))
+
+              const account = data.account || {}
+              const name = account.name
+              const email = account.email_address || data.email
+
+              debugInfo = { name, email, account, rawData: data }
+
+              if (name) username = name
+              if (email) userEmail = email
+
+              // If username is still Unknown but we have email, usage email as name initially
+              if (username === 'Unknown' && email) {
+                username = email
+              }
+            }
+          } catch (e) {
+            console.error('[Claude Login] Failed to get session:', e)
+            debugInfo = { error: String(e) }
+          }
+
+          if (username === 'Unknown') {
+            const response = await makeRequest(`${BASE_CLAUDE_URL}/api/organizations/${orgId}`)
+            const orgData = response.data as any
+            // Extract username from the response
+            let orgName = orgData?.display_name || orgData?.name || 'Unknown'
+
+            // Check if organization name matches generic pattern "email's Organization"
+            const genericPattern = /^(.*)'s Organization$/i
+            const match = orgName.match(genericPattern)
+            if (match && match[1] && match[1].includes('@')) {
+              // We found an email in the org name
+              if (!userEmail) userEmail = match[1]
+
+              // Use the part before @ as the username if the org name is generic
+              const outputName = match[1].split('@')[0]
+              username = outputName
+            } else {
+              username = orgName
+            }
+
+            debugInfo = { ...debugInfo, fallbackOrgData: orgData }
+          }
+
+          console.log(`[Claude Login] Username: ${username}, Email: ${userEmail}`)
+
+          // Save account info
+          await saveAccount(orgId, username, userEmail)
+          console.log('[Auth] Account saved successfully')
+
+          console.log('[Auth] ========== LOGIN FLOW SUCCESS ==========')
+          return { success: true, debug: debugInfo }
         } catch (error) {
           return { success: false, error: String(error) }
         }
@@ -75,22 +181,59 @@ export function setupClaudeHandlers() {
     }
 
     return new Promise((resolve) => {
+      let resolved = false // Flag to prevent double resolution
+
       authWindow.webContents.on('did-finish-load', async () => {
+        console.log('[Auth] Page finished loading')
         const result = await checkCookies()
-        if (result) resolve(result)
+        if (result && !resolved) {
+          resolved = true
+          console.log('[Auth] Resolving from did-finish-load')
+
+          // CRITICAL: Destroy window BEFORE resolving
+          console.log('[Auth] Destroying window before resolve...')
+          if (!authWindow.isDestroyed()) {
+            authWindow.destroy()
+            console.log('[Auth] Window destroyed successfully')
+          }
+
+          resolve(result)
+        }
       })
 
       const interval = setInterval(async () => {
-        const result = await checkCookies()
-        if (result) {
+        if (authWindow.isDestroyed()) {
+          console.log('[Auth] Window destroyed, stopping interval')
           clearInterval(interval)
+          return
+        }
+        const result = await checkCookies()
+        if (result && !resolved) {
+          resolved = true
+          console.log('[Auth] Resolving from interval check')
+          clearInterval(interval)
+
+          // CRITICAL: Destroy window BEFORE resolving to prevent redirect
+          console.log('[Auth] Destroying window before resolve...')
+          if (!authWindow.isDestroyed()) {
+            authWindow.destroy()
+            console.log('[Auth] Window destroyed successfully')
+          }
+
           resolve(result)
         }
       }, 1000)
 
       authWindow.on('closed', () => {
+        console.log('[Auth] Window closed event triggered')
         clearInterval(interval)
-        resolve({ success: false, error: 'Window closed by user' })
+        if (!resolved) {
+          resolved = true
+          console.log('[Auth] ========== LOGIN FLOW CANCELLED ==========')
+          resolve({ success: false, error: 'Window closed by user' })
+        } else {
+          console.log('[Auth] Already resolved, ignoring closed event')
+        }
       })
     })
   })
@@ -98,7 +241,7 @@ export function setupClaudeHandlers() {
   // Get all accounts
   ipcMain.handle('claude:get-accounts', async () => {
     try {
-      const accounts = getAccounts()
+      const accounts = await getAccounts()
       return { success: true, accounts }
     } catch (error) {
       console.error('[Claude] Failed to get accounts:', error)
@@ -124,6 +267,19 @@ export function setupClaudeHandlers() {
       return { success: true, account }
     } catch (error) {
       console.error('[Claude] Failed to get active account:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // Logout - clear all session data
+  ipcMain.handle('claude:logout', async () => {
+    try {
+      // Clear all cookies
+      await session.defaultSession.clearStorageData({ storages: ['cookies'] })
+      console.log('[Claude] Logged out successfully')
+      return { success: true }
+    } catch (error) {
+      console.error('[Claude] Failed to logout:', error)
       return { success: false, error: String(error) }
     }
   })

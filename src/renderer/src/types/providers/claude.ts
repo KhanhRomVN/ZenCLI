@@ -3,8 +3,8 @@ export interface AccountInfo {
   id: string // Unique identifier (orgId)
   orgId: string
   sessionKey: string
-  email?: string
   name?: string
+  email?: string
   avatarUrl?: string
   addedAt: number // Timestamp when account was added
   lastUsed: number // Timestamp when account was last used

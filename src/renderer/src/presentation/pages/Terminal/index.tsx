@@ -7,21 +7,40 @@ import { useConversation } from '../../providers/conversation-provider'
 import { Textarea } from '@khanhromvn/zenui'
 import { CornerDownRight } from 'lucide-react'
 
-export default function TerminalPage() {
+interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: number
+}
+
+interface TerminalPageProps {
+  messages?: Message[]
+  conversationId?: string
+  onMessagesUpdate?: (messages: Message[]) => void
+  onModeChange?: (mode: 'gui' | 'cli') => void
+}
+
+export default function TerminalPage({
+  messages: initialMessages = [],
+  conversationId: initialConversationId,
+  onMessagesUpdate,
+  onModeChange
+}: TerminalPageProps) {
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
-  const {
-    conversationId,
-    parentMessageUuid,
-    messages,
-    setConversationId,
-    setParentMessageUuid,
-    addMessage,
-    updateLastMessage
-  } = useConversation()
+
+  // Use local state for messages, initialized from props
+  const [localMessages, setLocalMessages] = useState<Message[]>(initialMessages)
+  const [localConversationId, setLocalConversationId] = useState<string | undefined>(
+    initialConversationId
+  )
+  const [localParentMessageUuid, setLocalParentMessageUuid] = useState<string | undefined>()
+
+  const { setConversationId, setParentMessageUuid } = useConversation()
 
   useEffect(() => {
     if (!terminalRef.current) return
@@ -65,7 +84,25 @@ export default function TerminalPage() {
 
     // Open terminal
     term.open(terminalRef.current)
-    fitAddon.fit()
+
+    // Safely fit the terminal
+    const safeFit = () => {
+      try {
+        if (
+          terminalRef.current &&
+          terminalRef.current.offsetParent !== null &&
+          terminalRef.current.clientWidth > 0 &&
+          terminalRef.current.clientHeight > 0
+        ) {
+          fitAddon.fit()
+        }
+      } catch (e) {
+        console.error('Failed to fit terminal:', e)
+      }
+    }
+
+    // Initial fit with delay
+    setTimeout(safeFit, 100)
 
     xtermRef.current = term
     fitAddonRef.current = fitAddon
@@ -77,10 +114,10 @@ export default function TerminalPage() {
     term.writeln('')
 
     // Display existing conversation history
-    if (messages.length > 0) {
+    if (initialMessages.length > 0) {
       term.writeln('\x1b[90m[Conversation history loaded]\x1b[0m')
       term.writeln('')
-      messages.forEach((msg) => {
+      initialMessages.forEach((msg: Message) => {
         if (msg.role === 'user') {
           term.writeln(`\x1b[1;33mYou:\x1b[0m ${msg.content}`)
         } else {
@@ -93,14 +130,17 @@ export default function TerminalPage() {
       term.writeln('')
     }
 
-    // Handle window resize
-    const handleResize = () => {
-      fitAddon.fit()
+    // Use ResizeObserver for more robust resizing support (handles split view resizing)
+    const resizeObserver = new ResizeObserver(() => {
+      safeFit()
+    })
+
+    if (terminalRef.current) {
+      resizeObserver.observe(terminalRef.current)
     }
-    window.addEventListener('resize', handleResize)
 
     return () => {
-      window.removeEventListener('resize', handleResize)
+      resizeObserver.disconnect()
       term.dispose()
     }
   }, [])
@@ -114,14 +154,17 @@ export default function TerminalPage() {
     setIsStreaming(true)
 
     try {
-      // Add user message to conversation
+      // Add user message to local state
       const userMessage = {
         id: Date.now().toString(),
         role: 'user' as const,
         content: input.trim(),
         timestamp: Date.now()
       }
-      addMessage(userMessage)
+
+      const updatedMessagesWithUser = [...localMessages, userMessage]
+      setLocalMessages(updatedMessagesWithUser)
+      onMessagesUpdate?.(updatedMessagesWithUser)
 
       term.writeln(`\x1b[1;33mYou:\x1b[0m ${input.trim()}`)
       term.writeln('')
@@ -130,13 +173,15 @@ export default function TerminalPage() {
       setInput('')
 
       // Create conversation if needed
-      let convId = conversationId
-      let parentUuid = parentMessageUuid
+      let convId = localConversationId
+      let parentUuid = localParentMessageUuid
 
       if (!convId) {
         const createResult = await window.electron.ipcRenderer.invoke('claude:create-conversation')
         convId = createResult.conversationId
         parentUuid = createResult.parentMessageUuid
+        setLocalConversationId(convId!)
+        setLocalParentMessageUuid(parentUuid!)
         setConversationId(convId!)
         setParentMessageUuid(parentUuid!)
       }
@@ -148,7 +193,10 @@ export default function TerminalPage() {
         content: '',
         timestamp: Date.now()
       }
-      addMessage(assistantMessage)
+
+      const updatedMessagesWithAssistant = [...updatedMessagesWithUser, assistantMessage]
+      setLocalMessages(updatedMessagesWithAssistant)
+      onMessagesUpdate?.(updatedMessagesWithAssistant)
 
       // Listen for streaming response
       let fullResponse = ''
@@ -161,7 +209,19 @@ export default function TerminalPage() {
           setIsStreaming(false)
         } else {
           fullResponse = data.text
-          updateLastMessage(fullResponse)
+
+          // Update last message in local state
+          setLocalMessages((prev) => {
+            const updated = [...prev]
+            if (updated.length > 0) {
+              updated[updated.length - 1] = {
+                ...updated[updated.length - 1],
+                content: fullResponse
+              }
+            }
+            onMessagesUpdate?.(updated)
+            return updated
+          })
 
           if (isFirstChunk) {
             // Clear the "Sending..." line
@@ -211,75 +271,76 @@ export default function TerminalPage() {
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-gray-700 bg-[#252526] p-4">
-        <div className="max-w-3xl mx-auto space-y-3">
-          {/* Badges Row */}
-          <div className="flex items-center gap-2">
-            {/* Model Badge */}
-            <div className="flex items-center gap-1 px-2 py-1 bg-blue-900/30 text-blue-300 rounded-md text-xs font-medium">
-              <span>🤖</span>
-              <span>Claude Sonnet 4.5</span>
-            </div>
+      <div className="w-full p-2 space-y-3 border-t border-border-default bg-card-background">
+        {/* Badges Row */}
+        <div className="flex items-center gap-2">
+          {/* Model Badge */}
+          <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md text-xs font-medium">
+            <span>🤖</span>
+            <span>Claude Sonnet 4.5</span>
+          </div>
 
-            <div className="flex-1" />
-
-            {/* Mode Toggle */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => {
+          {/* Mode Toggle */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                if (onModeChange) onModeChange('gui')
+                else {
                   const event = new CustomEvent('mode-change', { detail: 'gui' })
                   window.dispatchEvent(event)
-                }}
-                className="px-2 py-1 bg-gray-700 text-gray-300 rounded-md text-xs font-medium hover:bg-gray-600 transition-colors"
-              >
-                GUI
-              </button>
-              <button
-                onClick={() => {
-                  const event = new CustomEvent('mode-change', { detail: 'cli' })
-                  window.dispatchEvent(event)
-                }}
-                className="px-2 py-1 bg-green-900/30 text-green-300 rounded-md text-xs font-medium hover:bg-green-900/50 transition-colors"
-              >
-                CLI
-              </button>
-            </div>
-          </div>
-
-          {/* Textarea */}
-          <div className="w-full">
-            <Textarea
-              value={input}
-              onChange={(value) => setInput(value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSend()
                 }
               }}
-              placeholder="Message Claude..."
-              className="!w-full border border-input-border-default bg-input-background hover:border-input-border-hover rounded-md"
-              style={{ width: '100%' }}
-              minRows={2}
-              maxRows={10}
-              disabled={isStreaming}
-              resize="none"
-              bottomWrapper={
-                <div className="flex items-center justify-end">
-                  <button
-                    onClick={handleSend}
-                    disabled={!input.trim() || isStreaming}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-button-bg hover:bg-button-bgHover text-button-bgText border border-button-border hover:border-button-borderHover rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Send message (Enter)"
-                  >
-                    <CornerDownRight size={14} />
-                    <span className="text-sm">Send</span>
-                  </button>
-                </div>
-              }
-            />
+              className="px-2 py-1 rounded-md text-xs font-medium transition-colors bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+            >
+              GUI
+            </button>
+            <button
+              onClick={() => {
+                if (onModeChange) onModeChange('cli')
+                else {
+                  const event = new CustomEvent('mode-change', { detail: 'cli' })
+                  window.dispatchEvent(event)
+                }
+              }}
+              className="px-2 py-1 rounded-md text-xs font-medium transition-colors bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+            >
+              CLI
+            </button>
           </div>
+
+          <div className="flex-1" />
         </div>
+
+        {/* Textarea */}
+        <Textarea
+          value={input}
+          onChange={(value) => setInput(value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              handleSend()
+            }
+          }}
+          placeholder="Message Claude..."
+          className="!w-full border border-input-border-default bg-input-background hover:border-input-border-hover rounded-md"
+          style={{ width: '100%' }}
+          minRows={2}
+          maxRows={10}
+          disabled={isStreaming}
+          resize="none"
+          bottomWrapper={
+            <div className="flex items-center justify-end">
+              <button
+                onClick={handleSend}
+                disabled={!input.trim() || isStreaming}
+                className="flex items-center gap-2 p-2 bg-button-bg hover:bg-button-bgHover text-button-bgText border border-button-border hover:border-button-borderHover rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Send message (Enter)"
+              >
+                <CornerDownRight size={14} />
+              </button>
+            </div>
+          }
+        />
       </div>
     </div>
   )
