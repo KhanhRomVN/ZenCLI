@@ -5,11 +5,10 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as fs from 'fs'
 import * as path from 'path'
-import { Pool } from 'pg'
+
 import { setupClaudeHandlers } from './providers/claude/ipc-handlers'
 
 let mainWindow: BrowserWindow | null = null
-let cloudDbPool: Pool | null = null
 
 // Storage file path
 const getStorageFilePath = () => {
@@ -175,11 +174,52 @@ function setupFolderHandlers() {
   ipcMain.handle('fs:list-files', async (_event, folderPath: string) => {
     try {
       const files: string[] = []
-      const maxFiles = 1000 // Limit to prevent overwhelming
-      const ignoredDirs = ['node_modules', '.git', 'dist', 'build', '.next', 'out', 'coverage']
+      const maxFiles = 10000 // Increased limit
+      const ignoredDirs = [
+        'node_modules',
+        '.git',
+        'dist',
+        'build',
+        '.next',
+        'out',
+        'coverage',
+        '.vscode',
+        '.idea',
+        'public', // Often contains assets, skip for code context if desired (or keep if needed)
+        'assets'
+      ]
+      const ignoredExtensions = [
+        '.png',
+        '.jpg',
+        '.jpeg',
+        '.gif',
+        '.svg',
+        '.ico',
+        '.mp4',
+        '.mov',
+        '.mp3',
+        '.wav',
+        '.pdf',
+        '.zip',
+        '.tar',
+        '.gz',
+        '.7z',
+        '.rar',
+        '.exe',
+        '.dll',
+        '.so',
+        '.dylib',
+        '.bin',
+        '.obj',
+        '.o',
+        '.a',
+        '.lib',
+        '.pyc',
+        '.class'
+      ]
 
       function walkDir(dir: string, depth: number = 0) {
-        if (depth > 10 || files.length >= maxFiles) return // Prevent too deep recursion
+        if (depth > 15 || files.length >= maxFiles) return // Increased depth
 
         try {
           const entries = fs.readdirSync(dir, { withFileTypes: true })
@@ -195,6 +235,8 @@ function setupFolderHandlers() {
               if (ignoredDirs.includes(entry.name)) continue
               walkDir(fullPath, depth + 1)
             } else if (entry.isFile()) {
+              const ext = path.extname(entry.name).toLowerCase()
+              if (ignoredExtensions.includes(ext)) continue
               files.push(relativePath)
             }
           }
@@ -254,14 +296,6 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', async () => {
   if (process.platform !== 'darwin') {
-    if (cloudDbPool) {
-      try {
-        await cloudDbPool.end()
-        isCloudDbConnected = false
-      } catch (err) {
-        console.error('[app quit] ❌ Error closing database:', err)
-      }
-    }
     app.quit()
   }
 })

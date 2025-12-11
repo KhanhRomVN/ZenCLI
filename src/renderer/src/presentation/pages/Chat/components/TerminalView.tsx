@@ -3,9 +3,17 @@ import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import { WebLinksAddon } from 'xterm-addon-web-links'
 import 'xterm/css/xterm.css'
-import { useConversation } from '../../providers/conversation-provider'
-import { Textarea } from '@khanhromvn/zenui'
-import { CornerDownRight } from 'lucide-react'
+import { useConversation } from '../../../providers/conversation-provider'
+import {
+  Textarea,
+  Dropdown,
+  DropdownTrigger,
+  DropdownContent,
+  DropdownItem
+} from '@khanhromvn/zenui'
+import { CornerDownRight, Plus, Folder, FolderOpen, ChevronDown } from 'lucide-react'
+import { combinePrompts } from '../../../../constants/prompts'
+import { filterRelevantFiles } from '../../../../utils/file-filter'
 
 interface Message {
   id: string
@@ -17,15 +25,25 @@ interface Message {
 interface TerminalPageProps {
   messages?: Message[]
   conversationId?: string
+  selectedFolder?: string
+  selectedModel?: string
+  availableModels?: Array<{ id: string; name: string }>
   onMessagesUpdate?: (messages: Message[]) => void
-  onModeChange?: (mode: 'gui' | 'cli') => void
+  onAddAccount?: () => void
+  onSelectFolder?: () => void
+  onSelectModel?: (modelId: string) => void
 }
 
 export default function TerminalPage({
   messages: initialMessages = [],
   conversationId: initialConversationId,
+  selectedFolder,
+  selectedModel,
+  availableModels = [],
   onMessagesUpdate,
-  onModeChange
+  onAddAccount,
+  onSelectFolder,
+  onSelectModel
 }: TerminalPageProps) {
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<Terminal | null>(null)
@@ -39,6 +57,7 @@ export default function TerminalPage({
     initialConversationId
   )
   const [localParentMessageUuid, setLocalParentMessageUuid] = useState<string | undefined>()
+  const [isFirstMessage, setIsFirstMessage] = useState(true) // Track if this is first message
 
   const { setConversationId, setParentMessageUuid } = useConversation()
 
@@ -73,6 +92,19 @@ export default function TerminalPage({
       },
       allowProposedApi: true,
       disableStdin: true // Make terminal read-only
+    })
+
+    // Custom key handler for Copy (Ctrl+C / Cmd+C)
+    term.attachCustomKeyEventHandler((event) => {
+      // Check for Ctrl+C or Cmd+C (on Mac)
+      const isCopy = (event.ctrlKey || event.metaKey) && event.key === 'c'
+
+      if (isCopy && term.hasSelection()) {
+        const selection = term.getSelection()
+        navigator.clipboard.writeText(selection)
+        return false // Do not propagate to terminal (prevent SIGINT if it wasn't read-only)
+      }
+      return true
     })
 
     // Add addons
@@ -159,6 +191,7 @@ export default function TerminalPage({
       setLocalMessages([])
       setLocalConversationId(undefined)
       setLocalParentMessageUuid(undefined)
+      setIsFirstMessage(true) // Reset for new conversation
 
       // Redisplay welcome message
       term.writeln('\x1b[1;32m╔═══════════════════════════════════════════╗\x1b[0m')
@@ -169,6 +202,33 @@ export default function TerminalPage({
       term.writeln('')
     }
   }, [initialMessages])
+
+  // Sync initialMessages prop into localMessages when switching modes
+  // This ensures messages are preserved when switching between CLI and GUI
+  useEffect(() => {
+    // CRITICAL: Only sync if parent has MORE or EQUAL messages
+    // Never sync if parent sends LESS messages (would delete local messages)
+    // Exception: If parent sends empty AND local is also empty (initial state)
+    const shouldSync =
+      initialMessages.length > localMessages.length || // Parent has new messages
+      (initialMessages.length === 0 && localMessages.length === 0) // Both empty (initial)
+
+    if (shouldSync && initialMessages.length !== localMessages.length) {
+      setLocalMessages(initialMessages)
+    } else if (initialMessages.length < localMessages.length) {
+    }
+  }, [initialMessages])
+
+  // Sync local messages with parent component (after render completes)
+  // Use a ref to track if we should notify parent to avoid infinite loops
+  const prevMessagesLengthRef = useRef(0)
+  useEffect(() => {
+    // Only notify parent if messages actually changed (not just re-render)
+    if (localMessages.length !== prevMessagesLengthRef.current) {
+      prevMessagesLengthRef.current = localMessages.length
+      onMessagesUpdate?.(localMessages)
+    }
+  }, [localMessages, onMessagesUpdate])
 
   const handleSend = async () => {
     if (!input.trim() || isStreaming) return
@@ -189,7 +249,6 @@ export default function TerminalPage({
 
       const updatedMessagesWithUser = [...localMessages, userMessage]
       setLocalMessages(updatedMessagesWithUser)
-      onMessagesUpdate?.(updatedMessagesWithUser)
 
       term.writeln(`\x1b[1;33mYou:\x1b[0m ${input.trim()}`)
       term.writeln('')
@@ -202,7 +261,10 @@ export default function TerminalPage({
       let parentUuid = localParentMessageUuid
 
       if (!convId) {
-        const createResult = await window.electron.ipcRenderer.invoke('claude:create-conversation')
+        const createResult = await window.electron.ipcRenderer.invoke(
+          'claude:create-conversation',
+          selectedModel
+        )
         convId = createResult.conversationId
         parentUuid = createResult.parentMessageUuid
         setLocalConversationId(convId!)
@@ -221,7 +283,6 @@ export default function TerminalPage({
 
       const updatedMessagesWithAssistant = [...updatedMessagesWithUser, assistantMessage]
       setLocalMessages(updatedMessagesWithAssistant)
-      onMessagesUpdate?.(updatedMessagesWithAssistant)
 
       // Listen for streaming response
       let fullResponse = ''
@@ -233,6 +294,8 @@ export default function TerminalPage({
           window.electron.ipcRenderer.removeListener('claude:stream-chunk', handleStreamChunk)
           setIsStreaming(false)
         } else {
+          // Calculate delta to append only new text
+          const newText = data.text.slice(fullResponse.length)
           fullResponse = data.text
 
           // Update last message in local state
@@ -244,7 +307,6 @@ export default function TerminalPage({
                 content: fullResponse
               }
             }
-            onMessagesUpdate?.(updated)
             return updated
           })
 
@@ -253,32 +315,51 @@ export default function TerminalPage({
             term.write('\r\x1b[K')
             term.write('\x1b[1;36mClaude:\x1b[0m ')
             isFirstChunk = false
-          } else {
-            // Clear current line and rewrite
-            const lastLineStart = fullResponse.lastIndexOf('\n') + 1
-            const currentLineLength = fullResponse.length - lastLineStart
-
-            // Move cursor back and clear
-            for (let i = 0; i < currentLineLength; i++) {
-              term.write('\b')
-            }
-            term.write('\x1b[K')
           }
 
-          // Write the new text
-          const lines = data.text.split('\n')
-          const lastLine = lines[lines.length - 1]
-          term.write(lastLine)
+          // Write the new text with proper newline conversion for xterm.js
+          term.write(newText.replace(/\n/g, '\r\n'))
         }
       }
 
       window.electron.ipcRenderer.on('claude:stream-chunk', handleStreamChunk)
 
+      // Build enhanced prompt with context
+      const userMessageContent = userMessage.content
+      let enhancedPrompt = userMessageContent
+
+      // Add file context if folder is selected
+      if (selectedFolder) {
+        try {
+          const fileListResult = await window.electron.ipcRenderer.invoke(
+            'fs:list-files',
+            selectedFolder
+          )
+
+          if (fileListResult.success && fileListResult.files.length > 0) {
+            // Filter files based on relevance to user message
+            const relevantFiles = filterRelevantFiles(fileListResult.files, userMessageContent)
+            const fileContext = `\n\n<project_context>\nProject folder: ${selectedFolder}\nRelevant files (${relevantFiles.length} of ${fileListResult.totalFiles} total):\n${relevantFiles.join('\n')}\n</project_context>`
+            enhancedPrompt = userMessageContent + fileContext
+          }
+        } catch (error) {
+          console.error('[CLI] Failed to get file list:', error)
+        }
+      }
+
+      // Add DEFAULT_CLI_PROMPT for first message only
+      let finalPrompt = enhancedPrompt
+      if (isFirstMessage) {
+        const systemPrompt = combinePrompts()
+        finalPrompt = `${systemPrompt}\n\n${enhancedPrompt}`
+        setIsFirstMessage(false)
+      }
+
       // Send message via IPC
       await window.electron.ipcRenderer.invoke('claude:send-message', {
         conversationId: convId!,
         parentMessageUuid: parentUuid!,
-        message: userMessage.content
+        message: finalPrompt
       })
     } catch (error) {
       term.writeln('')
@@ -298,42 +379,68 @@ export default function TerminalPage({
       {/* Input Area */}
       <div className="w-full p-2 space-y-3 border-t border-border-default bg-card-background">
         {/* Badges Row */}
-        <div className="flex items-center gap-2">
-          {/* Model Badge */}
-          <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md text-xs font-medium">
-            <span>🤖</span>
-            <span>Claude Sonnet 4.5</span>
-          </div>
+        {/* Badges Row - Now with Controls */}
+        <div className="flex items-center gap-2 mb-2">
+          {/* Add Account Button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              console.log('Clicked Add Account')
+              onAddAccount?.()
+            }}
+            className="p-1 hover:bg-gray-700 rounded text-text-secondary hover:text-text-primary transition-colors"
+            title="Add Account"
+          >
+            <Plus size={16} />
+          </button>
 
-          {/* Mode Toggle */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => {
-                if (onModeChange) onModeChange('gui')
-                else {
-                  const event = new CustomEvent('mode-change', { detail: 'gui' })
-                  window.dispatchEvent(event)
-                }
-              }}
-              className="px-2 py-1 rounded-md text-xs font-medium transition-colors bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
-            >
-              GUI
-            </button>
-            <button
-              onClick={() => {
-                if (onModeChange) onModeChange('cli')
-                else {
-                  const event = new CustomEvent('mode-change', { detail: 'cli' })
-                  window.dispatchEvent(event)
-                }
-              }}
-              className="px-2 py-1 rounded-md text-xs font-medium transition-colors bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-            >
-              CLI
-            </button>
-          </div>
+          <div className="w-px h-4 bg-border-default mx-1" />
 
-          <div className="flex-1" />
+          {/* Folder Selector */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onSelectFolder?.()
+            }}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+              selectedFolder
+                ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50'
+                : 'bg-zinc-800 hover:bg-zinc-700 text-text-secondary'
+            }`}
+            title={selectedFolder || 'No folder selected'}
+          >
+            {selectedFolder ? <FolderOpen size={12} /> : <Folder size={12} />}
+            <span className="max-w-[150px] truncate">
+              {selectedFolder ? selectedFolder.split('/').pop() || selectedFolder : 'Select Folder'}
+            </span>
+          </button>
+
+          {/* Model Selector */}
+          <Dropdown>
+            <DropdownTrigger>
+              <button className="flex items-center gap-1 px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-xs font-medium text-text-secondary transition-colors">
+                <span>🤖</span>
+                <span>
+                  {availableModels?.find((m) => m.id === selectedModel)?.name ||
+                    'Claude Sonnet 4.5'}
+                </span>
+                <ChevronDown size={12} />
+              </button>
+            </DropdownTrigger>
+            <DropdownContent className="bg-dropdown-background border border-dropdown-border">
+              {availableModels?.map((model) => (
+                <DropdownItem
+                  key={model.id}
+                  onClick={() => onSelectModel?.(model.id)}
+                  className={`hover:bg-dropdown-itemHover ${
+                    selectedModel === model.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                  }`}
+                >
+                  {model.name}
+                </DropdownItem>
+              ))}
+            </DropdownContent>
+          </Dropdown>
         </div>
 
         {/* Textarea */}
@@ -346,18 +453,18 @@ export default function TerminalPage({
               handleSend()
             }
           }}
-          placeholder="Message Claude..."
+          placeholder={selectedFolder ? 'Message Claude...' : 'Please select a folder to start'}
           className="!w-full border border-input-border-default bg-input-background hover:border-input-border-hover rounded-md"
           style={{ width: '100%' }}
           minRows={2}
           maxRows={10}
-          disabled={isStreaming}
+          disabled={isStreaming || !selectedFolder}
           resize="none"
           bottomWrapper={
             <div className="flex items-center justify-end">
               <button
                 onClick={handleSend}
-                disabled={!input.trim() || isStreaming}
+                disabled={!input.trim() || isStreaming || !selectedFolder}
                 className="flex items-center gap-2 p-2 bg-button-bg hover:bg-button-bgHover text-button-bgText border border-button-border hover:border-button-borderHover rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Send message (Enter)"
               >

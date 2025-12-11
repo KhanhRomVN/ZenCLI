@@ -85,9 +85,7 @@ export default function SelectAccountModal({
                   <Card
                     key={account.id}
                     onClick={() => handleSelect(account.id)}
-                    className="cursor-pointer rounded-lg border-border-default hover:border-border-hover transition-all group"
-                    hoverable
-                    hoverEffectVariant="lift"
+                    className="cursor-pointer rounded-lg border-border-default hover:border-border-hover transition-all group hover:shadow-md hover:-translate-y-0.5"
                   >
                     <CardBody>
                       <div className="flex items-center gap-3">
