@@ -1,4 +1,28 @@
 // File: src/types/index.ts
+
+export interface TokenUsage {
+  input: number;
+  output: number;
+  totalCost?: number;
+}
+
+export interface ConversationHistory {
+  id: string;
+  name: string;
+  model: string;
+  messageCount: number;
+  createdAt: number;
+  lastMessageAt: number;
+  tokenUsage: TokenUsage;
+}
+
+export interface ChatSession {
+  conversationId: string;
+  parentMessageUuid: string;
+  messages: Message[];
+  tokenUsage: TokenUsage;
+  startedAt: number;
+}
 export interface Account {
   id: string;
   name: string;
@@ -20,6 +44,8 @@ export interface Config {
   enableStreaming?: boolean;
   showTimestamps?: boolean;
   maxConversations?: number;
+  tokenUsage?: Record<string, { input: number; output: number }>;
+  conversationHistory?: any[];
 }
 
 export interface Conversation {

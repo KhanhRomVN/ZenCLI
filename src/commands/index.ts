@@ -37,10 +37,8 @@ export default class Index extends Command {
       await this.showLogs();
     } else if (flags.account) {
       await this.showAccountManagement();
-    } else if (flags.chat) {
-      await this.startChat();
     } else {
-      await this.showWelcome();
+      await this.startChat();
     }
   }
 

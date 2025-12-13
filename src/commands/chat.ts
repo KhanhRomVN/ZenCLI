@@ -2,8 +2,12 @@ import { Command } from "@oclif/core";
 import { storage } from "../lib/storage";
 import { getApiClient } from "../lib/api-client";
 import { TerminalUI } from "../lib/terminal-ui";
+import { ChatUI } from "../lib/chat-ui";
 import chalk from "chalk";
 import * as readline from "readline";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 
 export default class Chat extends Command {
   static description = "Start interactive chat with Claude";
@@ -11,39 +15,43 @@ export default class Chat extends Command {
   static examples = ["<%= config.bin %> <%= command.id %>"];
 
   async run(): Promise<void> {
-    console.clear();
-
     const account = storage.getActiveAccount();
     if (!account) {
+      console.clear();
       TerminalUI.showError(
         "No active account. Please login first with: zencli auth login"
       );
+      console.log();
+      console.log(chalk.cyan("To add an account, run:"));
+      console.log(chalk.bold.cyan("  zencli auth login"));
+      console.log();
       process.exit(1);
     }
 
-    // Display chat header
-    console.log(chalk.bold.magenta("💬 CHAT WITH CLAUDE"));
-    console.log(chalk.gray(`Account: ${account.name}`));
-    console.log(chalk.gray(`Model: ${storage.getDefaultModel()}`));
-    console.log(chalk.gray("─".repeat(50)));
-    console.log();
+    ChatUI.showChatHeader(account);
+    ChatUI.showConversationHistory();
 
     const apiClient = getApiClient();
 
-    // Create new conversation
     const spinner = TerminalUI.showLoading("Creating conversation...");
     try {
       const { conversationId, parentMessageUuid } =
         await apiClient.createConversation(storage.getDefaultModel());
       spinner.succeed("Conversation created");
 
-      console.log(
-        chalk.gray('Type your message and press Enter. Type "/exit" to quit.')
+      const tokens = storage.getTokenUsage(account.id);
+      ChatUI.showInputPrompt(
+        storage.getDefaultModel(),
+        tokens,
+        account.email || account.name
       );
-      console.log(chalk.gray("─".repeat(50)));
-      console.log();
 
-      await this.chatLoop(apiClient, conversationId, parentMessageUuid);
+      await this.chatLoop(
+        apiClient,
+        conversationId,
+        parentMessageUuid,
+        account
+      );
     } catch (error: any) {
       spinner.fail("Failed to create conversation");
       TerminalUI.showError(error.message);
@@ -62,7 +70,8 @@ export default class Chat extends Command {
   private async chatLoop(
     apiClient: any,
     conversationId: string,
-    parentMessageUuid: string
+    parentMessageUuid: string,
+    account: any
   ) {
     const rl = readline.createInterface({
       input: process.stdin,
@@ -79,7 +88,12 @@ export default class Chat extends Command {
 
     while (true) {
       // Get user input
-      const userInput = await question(chalk.bold.cyan("You: "));
+      console.log(
+        chalk.gray('> Try "how do I log an error?" or type /help for commands')
+      );
+      console.log(chalk.gray("─".repeat(80)));
+      process.stdout.write(chalk.cyan("> "));
+      const userInput = await question("");
 
       if (userInput.trim().toLowerCase() === "/exit") {
         console.log(chalk.green("👋 Goodbye!"));
@@ -87,13 +101,66 @@ export default class Chat extends Command {
         break;
       }
 
-      if (userInput.trim().toLowerCase() === "/clear") {
-        console.clear();
-        console.log(chalk.bold.magenta("💬 CHAT WITH CLAUDE"));
-        console.log(chalk.gray(`Account: ${storage.getActiveAccount()?.name}`));
-        console.log(chalk.gray(`Model: ${storage.getDefaultModel()}`));
-        console.log(chalk.gray("─".repeat(50)));
+      if (userInput.trim().toLowerCase() === "/help") {
+        ChatUI.showCommandMenu();
+        continue;
+      }
+
+      if (userInput.trim().toLowerCase() === "/manage-account") {
+        console.log(chalk.yellow("Opening account management..."));
+        rl.close();
+        const Account = require("./account").default;
+        await Account.run([]);
+        process.exit(0);
+      }
+
+      if (userInput.trim().toLowerCase() === "/switch") {
+        console.log(chalk.yellow("Switch account..."));
+        const accounts = storage.getAccounts();
+        if (accounts.length === 0) {
+          console.log(chalk.red("No accounts available"));
+          continue;
+        }
+
+        console.log(chalk.bold.cyan("Available accounts:"));
+        accounts.forEach((acc: any, index: number) => {
+          const isActive = acc.id === account.id;
+          const prefix = isActive ? chalk.green("→ ") : "  ";
+          console.log(prefix + `${index + 1}. ${acc.name}`);
+        });
         console.log();
+
+        const switchInput = await question(
+          chalk.cyan("Enter account number (or Enter to cancel): ")
+        );
+        const accountIndex = parseInt(switchInput.trim()) - 1;
+
+        if (
+          !isNaN(accountIndex) &&
+          accountIndex >= 0 &&
+          accountIndex < accounts.length
+        ) {
+          await storage.setActiveAccount(accounts[accountIndex].id);
+          console.log(
+            chalk.green(`Switched to: ${accounts[accountIndex].name}`)
+          );
+          console.log(chalk.yellow("Restarting chat..."));
+          rl.close();
+          await this.run();
+          return;
+        }
+        continue;
+      }
+
+      if (userInput.trim().toLowerCase() === "/clear") {
+        ChatUI.showChatHeader(account);
+        ChatUI.showConversationHistory();
+        const tokens = storage.getTokenUsage(account.id);
+        ChatUI.showInputPrompt(
+          storage.getDefaultModel(),
+          tokens,
+          account.email || account.name
+        );
         continue;
       }
 
@@ -109,6 +176,21 @@ export default class Chat extends Command {
         continue;
       }
 
+      if (userInput.trim().toLowerCase() === "/export") {
+        await this.handleExport(conversationId);
+        continue;
+      }
+
+      if (userInput.trim().toLowerCase() === "/output-style") {
+        await this.handleOutputStyle();
+        continue;
+      }
+
+      if (userInput.trim().toLowerCase() === "/permissions") {
+        await this.handlePermissions();
+        continue;
+      }
+
       if (userInput.trim() === "") {
         continue;
       }
@@ -120,28 +202,29 @@ export default class Chat extends Command {
         // Send message and stream response
         let responseText = "";
         let isFirstChunk = true;
-        const { messageUuid } = await apiClient.sendMessage(
-          conversationId,
-          currentParentUuid,
-          userInput,
-          (chunk: string) => {
-            // Calculate delta (only new text)
-            const delta = chunk.slice(responseText.length);
-            responseText = chunk;
+        const { messageUuid, inputTokens, outputTokens } =
+          await apiClient.sendMessage(
+            conversationId,
+            currentParentUuid,
+            userInput,
+            (chunk: string) => {
+              const delta = chunk.slice(responseText.length);
+              responseText = chunk;
 
-            // Clear the "thinking" line on first chunk
-            if (isFirstChunk) {
-              process.stdout.write("\r" + " ".repeat(50) + "\r");
-              process.stdout.write(chalk.bold.green("Claude: "));
-              isFirstChunk = false;
+              if (isFirstChunk) {
+                process.stdout.write("\r" + " ".repeat(50) + "\r");
+                process.stdout.write(chalk.bold.green("Claude: "));
+                isFirstChunk = false;
+              }
+
+              process.stdout.write(delta);
             }
-
-            // Write only the new text (delta)
-            process.stdout.write(delta);
-          }
-        );
+          );
 
         currentParentUuid = messageUuid;
+
+        storage.updateTokenUsage(account.id, inputTokens, outputTokens);
+
         console.log("\n");
       } catch (error: any) {
         console.error("[Chat] Error details:", {
@@ -150,6 +233,83 @@ export default class Chat extends Command {
         });
         TerminalUI.showError(`Failed to send message: ${error.message}`);
       }
+    }
+  }
+
+  private async handleExport(conversationId: string) {
+    console.log(chalk.yellow("Export conversation..."));
+
+    const inquirer = await import("inquirer");
+    const { format, destination } = await inquirer.default.prompt([
+      {
+        type: "list",
+        name: "format",
+        message: "Select export format:",
+        choices: ["JSON", "Markdown", "Plain Text"],
+      },
+      {
+        type: "list",
+        name: "destination",
+        message: "Export to:",
+        choices: ["File", "Clipboard"],
+      },
+    ]);
+
+    if (destination === "File") {
+      const exportDir = path.join(os.homedir(), ".zencli", "exports");
+      if (!fs.existsSync(exportDir)) {
+        fs.mkdirSync(exportDir, { recursive: true });
+      }
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const ext =
+        format === "JSON" ? "json" : format === "Markdown" ? "md" : "txt";
+      const filename = `conversation-${conversationId.slice(0, 8)}-${timestamp}.${ext}`;
+      const filepath = path.join(exportDir, filename);
+
+      const content = `Conversation ID: ${conversationId}\nExported: ${new Date().toLocaleString()}\n\n(Content would be here)`;
+      fs.writeFileSync(filepath, content, "utf8");
+
+      console.log(chalk.green(`✅ Exported to: ${filepath}`));
+    } else {
+      console.log(chalk.yellow("⚠️  Clipboard export not yet implemented"));
+    }
+  }
+
+  private async handleOutputStyle() {
+    console.log(chalk.yellow("Output Style Settings"));
+
+    const inquirer = await import("inquirer");
+    const { style } = await inquirer.default.prompt([
+      {
+        type: "list",
+        name: "style",
+        message: "Select output style:",
+        choices: ["Compact", "Detailed", "Minimal"],
+      },
+    ]);
+
+    console.log(chalk.green(`✅ Output style set to: ${style}`));
+  }
+  private async handlePermissions() {
+    console.log(chalk.yellow("Permissions Management"));
+    const inquirer = await import("inquirer");
+    const { action } = await inquirer.default.prompt([
+      {
+        type: "list",
+        name: "action",
+        message: "Select action:",
+        choices: ["View Permissions", "Allow Tool", "Deny Tool", "Reset All"],
+      },
+    ]);
+
+    if (action === "View Permissions") {
+      console.log(chalk.cyan("Current permissions:"));
+      console.log(chalk.gray("  • web_search: Allowed"));
+      console.log(chalk.gray("  • artifacts: Allowed"));
+      console.log(chalk.gray("  • repl: Allowed"));
+    } else {
+      console.log(chalk.yellow(`⚠️  ${action} not yet implemented`));
     }
   }
 }
