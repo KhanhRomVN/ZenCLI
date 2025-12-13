@@ -9,9 +9,7 @@
   },
   "oclif": {
     "bin": "zencli",
-    "dirname": "zencli",
-    "commands": "./lib/commands",
-    "topicSeparator": ":"
+    "commands": "./lib/commands"
   },
   "files": [
     "bin",

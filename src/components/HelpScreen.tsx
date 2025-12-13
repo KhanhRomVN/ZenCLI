@@ -25,9 +25,12 @@ export const HelpScreen: React.FC<HelpScreenProps> = ({ onBack }) => {
           🚀 QUICK START
         </Text>
         <Text color="white">1. Add your first account:</Text>
-        <Text color="cyan"> zencli auth login</Text>
+        <Text color="cyan"> zencli --login</Text>
         <Text color="white">2. Start chatting with Claude:</Text>
-        <Text color="cyan"> zencli chat</Text>
+        <Text color="cyan"> zencli --chat</Text>
+        <Text color="white">or simply:</Text>
+        <Text color="cyan"> zencli</Text>
+        <Text color="gray"> (Opens main menu)</Text>
       </Box>
 
       <Box flexDirection="column" marginBottom={2}>
@@ -35,23 +38,26 @@ export const HelpScreen: React.FC<HelpScreenProps> = ({ onBack }) => {
           📋 MAIN COMMANDS
         </Text>
         <Text color="cyan"> zencli </Text>
-        <Text color="gray"> Show main menu</Text>
-        <Text color="cyan"> zencli chat </Text>
-        <Text color="gray"> Start interactive chat</Text>
-        <Text color="cyan"> zencli auth login </Text>
-        <Text color="gray"> Add new Claude account</Text>
-        <Text color="cyan"> zencli account </Text>
-        <Text color="gray"> Manage accounts</Text>
+        <Text color="gray"> Show main menu (TUI)</Text>
+        <Text color="cyan"> zencli --login </Text>
+        <Text color="gray"> Quick login - add new account</Text>
+        <Text color="cyan"> zencli --chat </Text>
+        <Text color="gray"> Start chat directly</Text>
+        <Text color="cyan"> zencli --account </Text>
+        <Text color="gray"> Manage accounts (TUI)</Text>
+        <Text color="cyan"> zencli --logs </Text>
+        <Text color="gray"> Show log directory path</Text>
       </Box>
 
       <Box flexDirection="column" marginBottom={2}>
         <Text color="magenta" bold>
-          🔐 ACCOUNT MANAGEMENT
+          🎨 TERMINAL UI FEATURES
         </Text>
-        <Text color="cyan"> zencli account:list </Text>
-        <Text color="gray"> List all accounts</Text>
-        <Text color="cyan"> zencli account:switch </Text>
-        <Text color="gray"> Switch active account</Text>
+        <Text color="gray">• Interactive menu navigation</Text>
+        <Text color="gray">• Real-time chat with Claude</Text>
+        <Text color="gray">• Account switching</Text>
+        <Text color="gray">• Settings management</Text>
+        <Text color="gray">• All through beautiful TUI</Text>
       </Box>
 
       <Box flexDirection="column" marginBottom={2}>
