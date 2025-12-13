@@ -1,8 +1,8 @@
 // File: src/commands/auth.ts
 import { Command, Flags, Args } from "@oclif/core"; // Thêm Args
-import { authManager } from "../lib/auth-manager";
-import { storage } from "../lib/storage";
-import { TerminalUI } from "../lib/terminal-ui";
+import { authManager } from "../lib/auth-manager.js";
+import { storage } from "../lib/storage.js";
+import { TerminalUI } from "../lib/terminal-ui.js";
 import chalk from "chalk";
 
 export default class Auth extends Command {

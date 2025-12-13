@@ -1,5 +1,6 @@
 {
   "name": "zencli",
+  "type": "module",
   "version": "1.0.0",
   "description": "A CLI tool for interacting with Claude AI",
   "main": "lib/bin/run.js",
@@ -31,6 +32,7 @@
   },
   "dependencies": {
     "@oclif/core": "^4.8.0",
+    "@types/react": "^19.2.7",
     "chalk": "^4.1.2",
     "cli-select": "^1.1.2",
     "conf": "^10.2.0",
@@ -38,12 +40,16 @@
     "enquirer": "^2.4.1",
     "figlet": "^1.6.0",
     "gradient-string": "^2.0.2",
-    "inquirer": "^8.2.6",
+    "ink": "^6.5.1",
+    "ink-select-input": "^6.2.0",
+    "ink-text-input": "^6.0.0",
+    "inquirer": "^8.2.7",
     "node-fetch": "^2.7.0",
     "open": "^9.1.0",
     "ora": "^5.4.1",
     "prompts": "^2.4.2",
     "puppeteer-core": "^22.7.1",
+    "react": "^19.2.3",
     "uuid": "^13.0.0",
     "ws": "^8.16.0"
   },

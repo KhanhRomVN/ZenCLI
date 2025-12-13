@@ -1,36 +1,37 @@
 #!/usr/bin/env node
 
-async function main() {
-  const oclif = require("@oclif/core");
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
-  // Get command line arguments
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+async function main() {
+  const oclif = await import("@oclif/core");
   const args = process.argv.slice(2);
 
-  // Check if we should run the index command
-  // Run index only if: no args OR args start with "-" (flags only)
   const shouldRunIndex =
     args.length === 0 || (args.length > 0 && args[0].startsWith("-"));
 
   if (shouldRunIndex) {
-    // Load the Index command directly
     try {
-      const path = require("path");
-      const IndexCommand = require(
-        path.join(__dirname, "..", "lib", "commands", "index.js")
+      const { default: IndexCommand } = await import(
+        join(__dirname, "..", "lib", "commands", "index.js")
       );
 
-      // Run the Index command
-      const command = new IndexCommand.default(args, await oclif.Config.load());
+      const command = new IndexCommand(args, await oclif.Config.load());
       await command.run();
       await oclif.flush();
     } catch (error) {
       await oclif.handle(error);
     }
   } else {
-    // Run oclif normally for all other commands (auth, chat, account, etc.)
     await oclif.run();
     await oclif.flush();
   }
 }
 
-main().catch(require("@oclif/core/handle"));
+main().catch(async (error) => {
+  const { handle } = await import("@oclif/core/handle");
+  await handle(error);
+});

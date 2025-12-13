@@ -1,7 +1,7 @@
 import { Command, Flags } from "@oclif/core";
-import { TerminalUI } from "../lib/terminal-ui";
-import { storage } from "../lib/storage";
-import { authManager } from "../lib/auth-manager";
+import { TerminalUI } from "../lib/terminal-ui.js";
+import { storage } from "../lib/storage.js";
+import { authManager } from "../lib/auth-manager.js";
 import chalk from "chalk";
 
 export default class Account extends Command {
