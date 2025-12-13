@@ -85,15 +85,11 @@ export default class Chat extends Command {
     };
 
     let currentParentUuid = parentMessageUuid;
+    let isFirstInput = true;
 
     while (true) {
       // Get user input
-      console.log(
-        chalk.gray('> Try "how do I log an error?" or type /help for commands')
-      );
-      console.log(chalk.gray("─".repeat(80)));
-      process.stdout.write(chalk.cyan("> "));
-      const userInput = await question("");
+      const userInput = await question(chalk.cyan("> "));
 
       if (userInput.trim().toLowerCase() === "/exit") {
         console.log(chalk.green("👋 Goodbye!"));
@@ -226,6 +222,13 @@ export default class Chat extends Command {
         storage.updateTokenUsage(account.id, inputTokens, outputTokens);
 
         console.log("\n");
+
+        const tokens = storage.getTokenUsage(account.id);
+        ChatUI.showInputPrompt(
+          storage.getDefaultModel(),
+          tokens,
+          account.email || account.name
+        );
       } catch (error: any) {
         console.error("[Chat] Error details:", {
           message: error.message,
