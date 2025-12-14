@@ -31,6 +31,7 @@ export class AccountController {
             reqCount: acc.lastReqDate === today ? acc.dailyReqCount || 0 : 0,
             inputTokens: acc.inputTokens || 0,
             outputTokens: acc.outputTokens || 0,
+            conversationId: acc.conversationId || null,
           };
         }),
       };

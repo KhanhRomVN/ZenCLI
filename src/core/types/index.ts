@@ -49,6 +49,7 @@ export interface Account {
   lastReqDate: string; // YYYY-MM-DD
   inputTokens: number;
   outputTokens: number;
+  conversationId?: string;
 }
 
 export type ThemeType = "light" | "dark" | "auto";

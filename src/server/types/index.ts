@@ -26,6 +26,7 @@ export interface AccountsResponse {
     reqCount: number;
     inputTokens: number;
     outputTokens: number;
+    conversationId?: string | null;
   }>;
   error?: string;
 }

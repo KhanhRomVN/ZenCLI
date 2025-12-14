@@ -7,6 +7,7 @@ const router = Router();
 router.post("/select-account", ChatController.selectAccount); // Endpoint to select account
 router.post("/", ChatController.sendMessage); // Send message
 
-// Future: Add history, etc if needed as per user request (d/ gửi req cho account đó để chat)
+router.post("/new", ChatController.newConversation); // Start new conversation (clear context)
+router.get("/:conversationId", ChatController.getHistory); // Get conversation history
 
 export default router;
