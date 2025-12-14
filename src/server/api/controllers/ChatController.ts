@@ -39,7 +39,7 @@ export class ChatController {
 
   static async sendMessage(req: Request, res: Response) {
     try {
-      const { accountId, conversationId, parentMessageUuid, message, stream } =
+      let { accountId, conversationId, parentMessageUuid, message, stream } =
         req.body as ChatSendRequest & { accountId: string };
 
       // Validate required fields
@@ -72,6 +72,30 @@ export class ChatController {
       await storage.setActiveAccount(accountId);
 
       const apiClient = getApiClient();
+      
+      // Check if conversationId is valid UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      
+      if (!conversationId || !uuidRegex.test(conversationId)) {
+        logger.info(
+            "Invalid or missing conversationId, creating new one", 
+            { originalId: conversationId }, 
+            "ChatController"
+        );
+        const newConv = await apiClient.createConversation(storage.getDefaultModel());
+        conversationId = newConv.conversationId;
+        parentMessageUuid = newConv.parentMessageUuid;
+      }
+      
+      // Now conversationId is guaranteed to be a valid string
+      // Ensure parentMessageUuid is also a string if it was undefined
+      if (!parentMessageUuid) {
+        // If we just created the conversation, it's set. 
+        // If we didn't (because conversationId was valid), but parent is missing,
+        // we might defaults to conversationId (root) or let it be empty string?
+        // ApiClient type expects string.
+        parentMessageUuid = conversationId; 
+      }
 
       // Update account stats (Request count)
       const accountIndex = accounts.findIndex((a) => a.id === accountId);
@@ -92,6 +116,10 @@ export class ChatController {
         res.setHeader("Content-Type", "text/event-stream");
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Connection", "keep-alive");
+        
+        // Send initial metadata event containing the conversation IDs
+        res.write(`event: metadata\n`);
+        res.write(`data: ${JSON.stringify({ conversationId, parentMessageUuid })}\n\n`);
 
         let fullContent = "";
 
@@ -133,6 +161,11 @@ export class ChatController {
         const response: ChatSendResponse = {
           success: true,
           messageUuid: result.messageUuid,
+          conversationId,
+          parentMessageUuid, // Return the used parent ID (or the new message msg ID? usually the used parent)
+                             // Actually user might want the NEW parent (current msg ID).
+                             // But interface says "parentMessageUuid". 
+                             // Let's return the IDs used/generated for this session context.
           content: result.content,
           inputTokens: result.inputTokens,
           outputTokens: result.outputTokens,

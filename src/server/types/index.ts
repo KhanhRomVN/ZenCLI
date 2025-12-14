@@ -38,8 +38,8 @@ export interface ChatCreateResponse {
 }
 
 export interface ChatSendRequest {
-  conversationId: string;
-  parentMessageUuid: string;
+  conversationId?: string;
+  parentMessageUuid?: string;
   message: string;
   stream?: boolean;
 }
@@ -47,6 +47,8 @@ export interface ChatSendRequest {
 export interface ChatSendResponse {
   success: boolean;
   messageUuid?: string;
+  conversationId: string;
+  parentMessageUuid: string;
   content?: string;
   inputTokens?: number;
   outputTokens?: number;
