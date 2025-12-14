@@ -16,7 +16,7 @@ async function main() {
   if (shouldRunIndex) {
     try {
       const { default: IndexCommand } = await import(
-        join(__dirname, "..", "lib", "commands", "index.js")
+        join(__dirname, "..", "lib", "cli", "commands", "index.js")
       );
 
       const command = new IndexCommand(args, await oclif.Config.load());

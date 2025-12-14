@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { render, Text, Box, useInput, useApp } from "ink";
-import { storage } from "../lib/storage.js";
+import { storage } from "../../core/lib/storage.js";
 import gradient from "gradient-string";
 
 interface MainMenuProps {

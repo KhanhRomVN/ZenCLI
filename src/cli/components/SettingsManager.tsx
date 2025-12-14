@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Text, Box, useInput } from "ink";
-import { storage } from "../lib/storage.js";
-import { getApiClient } from "../lib/api-client.js";
+import { storage } from "../../core/lib/storage.js";
 
 interface SettingsManagerProps {
   onBack: () => void;

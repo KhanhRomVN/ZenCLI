@@ -1,117 +1,24 @@
-// File: src/types/index.ts
-
-export interface TokenUsage {
-  input: number;
-  output: number;
-  totalCost?: number;
-}
-
-export interface ConversationHistory {
-  id: string;
-  name: string;
-  model: string;
-  messageCount: number;
-  createdAt: number;
-  lastMessageAt: number;
-  tokenUsage: TokenUsage;
-}
-
-export interface ChatSession {
-  conversationId: string;
-  parentMessageUuid: string;
-  messages: Message[];
-  tokenUsage: TokenUsage;
-  startedAt: number;
-}
-export interface Account {
-  id: string;
-  name: string;
-  email?: string;
-  orgId: string;
-  sessionKey: string;
-  cookieString?: string;
-  addedAt: number;
-  lastUsed: number;
-}
-
+// Config Types
 export interface Config {
   accounts: Account[];
-  activeAccountId?: string;
+  activeAccountId: string | null;
   defaultModel: string;
-  deviceId?: string;
-  anonymousId?: string;
-  theme?: "dark" | "light" | "auto";
-  enableStreaming?: boolean;
-  showTimestamps?: boolean;
-  maxConversations?: number;
-  tokenUsage?: Record<string, { input: number; output: number }>;
-  conversationHistory?: any[];
-}
-
-export interface Conversation {
-  uuid: string;
-  name: string;
-  updated_at: string;
-  model?: string;
-  message_count?: number;
-}
-
-export interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: number;
-  conversationId?: string;
-  model?: string;
-}
-
-export interface ApiResponse {
-  success: boolean;
-  data?: any;
-  error?: string;
-  statusCode?: number;
-}
-
-export interface StreamChunk {
-  text: string;
-  complete?: boolean;
-  steps?: any[];
-  messageUuid?: string;
-}
-
-export interface ChatMessage {
-  prompt: string;
-  attachments?: any[];
-  files?: any[];
-  sync_sources?: any[];
-}
-
-export interface UploadFilePayload {
-  name: string;
-  size: number;
-  type: string;
-  data: ArrayBuffer | Buffer | Uint8Array | string;
-}
-
-export interface AttachmentPayload {
-  document_id: string;
-  file_name: string;
-  file_size: number;
-  file_type: string;
-  file_url?: string;
-  extracted_content?: string;
-}
-
-export interface ClaudeModel {
-  id: string;
-  name: string;
-  description?: string;
-  max_tokens?: number;
-  capabilities?: string[];
-  is_default?: boolean;
+  theme: string;
+  enableStreaming: boolean; // Added match defaults.ts
+  showTimestamps: boolean; // Added match defaults.ts
+  maxConversations: number;
+  tokenUsage: any;
+  conversationHistory: string[];
+  stats: Stats;
 }
 
 export interface UserPreferences {
+  autoSave: boolean;
+  notifications: boolean;
+  showTimestamp: boolean;
+  editor: string;
+  language: string;
+  // Added to match defaults.ts
   autoComplete: boolean;
   syntaxHighlighting: boolean;
   wordWrap: boolean;
@@ -120,135 +27,49 @@ export interface UserPreferences {
   showLineNumbers: boolean;
 }
 
-export interface ChatState {
-  conversationId?: string;
-  parentMessageUuid?: string;
-  messages: Message[];
-  isStreaming: boolean;
-  lastUpdated: number;
-}
-
-export interface FileContext {
-  folderPath: string;
-  files: string[];
-  totalFiles: number;
-  lastScanned: number;
-}
-
-export interface CommandHistory {
-  command: string;
-  timestamp: number;
-  success: boolean;
-  output?: string;
-}
-
-export interface ZenCliStats {
-  totalMessages: number;
+export interface Stats {
   totalConversations: number;
+  totalMessages: number;
   totalTokens: number;
-  favoriteModel: string;
-  mostActiveHour: number;
   lastActive: number;
 }
 
-export interface BrowserProfile {
-  userAgent: string;
-  viewport: {
-    width: number;
-    height: number;
-  };
-  locale: string;
-  timezone: string;
-}
-
-export interface LoginOptions {
-  headless?: boolean;
-  timeout?: number;
-  userDataDir?: string;
-  executablePath?: string;
-}
-
-export interface AuthResult {
-  success: boolean;
-  account?: Account;
-  error?: string;
-  cookies?: any[];
-  sessionValid?: boolean;
-}
-
-export interface ConversationSummary {
-  uuid: string;
-  name: string;
-  preview: string;
-  model: string;
-  messageCount: number;
-  lastMessageTime: number;
-}
-
-export interface StreamingOptions {
-  onText?: (text: string) => void;
-  onComplete?: (fullText: string) => void;
-  onError?: (error: Error) => void;
-  onStart?: () => void;
-}
-
-export interface PaginationOptions {
-  page: number;
-  limit: number;
-  sortBy: "updated" | "created" | "name";
-  sortOrder: "asc" | "desc";
-}
-
-export interface SearchOptions {
-  query: string;
-  searchIn: ("messages" | "conversations" | "files")[];
-  limit?: number;
-}
-
-export interface ExportOptions {
-  format: "json" | "txt" | "md" | "pdf";
-  includeMetadata: boolean;
-  includeTimestamps: boolean;
-}
-
-export interface ImportOptions {
-  format: "json" | "txt" | "md";
-  mergeExisting: boolean;
-  validateBeforeImport: boolean;
-}
-
-export interface Notification {
+export interface Account {
   id: string;
-  type: "info" | "success" | "warning" | "error";
-  title: string;
-  message: string;
-  timestamp: number;
-  read: boolean;
-}
-
-export interface Keybind {
-  key: string;
-  action: string;
-  description: string;
-  global?: boolean;
-}
-
-export interface Theme {
   name: string;
-  type: "dark" | "light";
-  colors: {
-    primary: string;
-    secondary: string;
-    background: string;
-    foreground: string;
-    accent: string;
-    muted: string;
-    border: string;
-    success: string;
-    warning: string;
-    error: string;
-    info: string;
-  };
+  email: string;
+  orgId: string;
+  sessionKey: string;
+  addedAt: number;
+  lastUsed: number;
+  cookieString?: string;
+  // New fields for usage tracking
+  username: string;
+  dailyReqCount: number;
+  lastReqDate: string; // YYYY-MM-DD
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface Message {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: number;
+  conversationId?: string;
+  model?: string;
+  metadata?: any;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  model: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: Message[];
+  status: "active" | "archived" | "deleted";
+  tags?: string[];
 }
 
 export interface Plugin {
@@ -513,13 +334,50 @@ export interface PaginatedResponse<T> {
 }
 
 export interface ErrorResponse {
-  error: {
-    code: string;
-    message: string;
-    details?: any;
-  };
-  timestamp: number;
+  success: boolean; // Added success to match controller usage
+  error:
+    | string
+    | {
+        // Allow string or object
+        code: string;
+        message: string;
+        details?: any;
+      };
+  timestamp?: number;
   requestId?: string;
+}
+
+export interface AccountsResponse {
+  success: boolean;
+  accounts: any[];
+}
+
+export interface LoginResponse {
+  success: boolean;
+  account: any;
+}
+
+export interface ChatCreateResponse {
+  success: boolean;
+  conversationId: string;
+  parentMessageUuid: string;
+  error?: string;
+}
+
+export interface ChatSendRequest {
+  conversationId: string;
+  parentMessageUuid: string;
+  message: string;
+  stream?: boolean;
+}
+
+export interface ChatSendResponse {
+  success: boolean;
+  messageUuid: string;
+  content: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  error?: string;
 }
 
 // Feature Flags

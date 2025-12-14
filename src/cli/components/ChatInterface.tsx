@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Text, Box, useStdout, useInput } from "ink";
-import { getApiClient } from "../lib/api-client.js";
-import { storage } from "../lib/storage.js";
+import { getApiClient } from "../../core/lib/api-client.js";
+import { storage } from "../../core/lib/storage.js";
+import { logger } from "../../core/lib/logger.js";
 import path from "path";
 
 interface Message {
@@ -13,6 +14,13 @@ interface Message {
 
 interface ChatInterfaceProps {
   onExit: () => void;
+}
+
+interface ConversationItem {
+  id: string;
+  name: string;
+  lastMessage: string;
+  timestamp: number;
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onExit }) => {
@@ -30,6 +38,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onExit }) => {
   const [terminalWidth, setTerminalWidth] = useState(80);
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const [recentConversations, setRecentConversations] = useState<
+    ConversationItem[]
+  >([]);
 
   const commands = [
     { name: "/exit", description: "Exit the chat and return to main menu" },
@@ -55,6 +66,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onExit }) => {
     // Initialize conversation
     initializeConversation();
 
+    // Load recent conversations
+    loadRecentConversations();
+
     // Cursor blink
     const cursorInterval = setInterval(() => {
       setCursorVisible((prev) => !prev);
@@ -63,14 +77,78 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onExit }) => {
     return () => clearInterval(cursorInterval);
   }, []);
 
+  const loadRecentConversations = async () => {
+    try {
+      logger.info("Loading recent conversations");
+      const conversations = await apiClient.getConversations();
+      logger.debug("Conversations loaded", { count: conversations.length });
+
+      // Log toàn bộ object của conversation đầu tiên để xem cấu trúc
+      if (conversations.length > 0) {
+        logger.debug("Full conversation object sample", {
+          fullObject: JSON.stringify(conversations[0], null, 2),
+        });
+      }
+
+      const formatted = conversations
+        .slice(0, 10)
+        .map((conv: any, index: number) => {
+          // Log chi tiết từng field
+          logger.debug(`Conversation ${index} details`, {
+            uuid: conv.uuid,
+            name: conv.name,
+            summary: conv.summary,
+            chat_messages: conv.chat_messages ? conv.chat_messages.length : 0,
+            updated_at: conv.updated_at,
+            allKeys: Object.keys(conv),
+          });
+
+          // Trim name và check empty string
+          const trimmedName = conv.name?.trim() || "";
+
+          // Thử lấy tên từ chat_messages nếu có
+          let displayName = trimmedName;
+          if (
+            !displayName &&
+            conv.chat_messages &&
+            conv.chat_messages.length > 0
+          ) {
+            const firstMessage = conv.chat_messages[0];
+            if (firstMessage && firstMessage.text) {
+              displayName = firstMessage.text.substring(0, 50) + "...";
+            }
+          }
+
+          if (!displayName) {
+            displayName = "Untitled";
+          }
+
+          return {
+            id: conv.uuid,
+            name: displayName,
+            lastMessage: conv.summary || "",
+            timestamp: new Date(conv.updated_at).getTime(),
+          };
+        });
+      setRecentConversations(formatted);
+    } catch (error: any) {
+      logger.error("Failed to load conversations", { error: error.message });
+    }
+  };
+
   const initializeConversation = async () => {
     setIsLoading(true);
     try {
+      logger.info("Creating new conversation", {
+        model: storage.getDefaultModel(),
+      });
       const { conversationId, parentMessageUuid } =
         await apiClient.createConversation(storage.getDefaultModel());
       setConversationId(conversationId);
       setParentMessageUuid(parentMessageUuid);
+      logger.info("Conversation created successfully", { conversationId });
     } catch (error: any) {
+      logger.error("Failed to create conversation", { error: error.message });
       setMessages([
         {
           id: "error",
@@ -371,19 +449,32 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onExit }) => {
     }
   });
 
-  // Calculate visible messages
-  const chatAreaHeight = terminalHeight - 16;
-  const visibleMessages = messages.slice(
-    Math.max(0, messages.length - chatAreaHeight),
-    messages.length
-  );
-
   // Filter commands based on input
   const filteredCommands = input.startsWith("/")
     ? commands.filter((cmd) =>
         cmd.name.toLowerCase().includes(input.toLowerCase())
       )
     : [];
+
+  // Calculate proper heights for each section
+  const headerHeight = 14;
+  const inputAreaHeight = Math.max(inputLines.length, 1) + 2; // +2 for border
+  const statusBarHeight = 1;
+  const commandPanelHeight =
+    showCommandSuggestions && filteredCommands.length > 0
+      ? Math.min(filteredCommands.length + 3, 10) // +3 cho header và footer, max 10 dòng
+      : 0;
+  const chatAreaHeight =
+    terminalHeight -
+    headerHeight -
+    inputAreaHeight -
+    statusBarHeight -
+    commandPanelHeight -
+    1; // Giảm thêm 1 dòng để spacing hợp lý
+  const visibleMessages = messages.slice(
+    Math.max(0, messages.length - chatAreaHeight),
+    messages.length
+  );
 
   // Shorten folder path
   const shortenPath = (fullPath: string) => {
@@ -394,17 +485,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onExit }) => {
     return fullPath;
   };
 
-  const leftColumnWidth = Math.floor(terminalWidth * 0.6);
-  const rightColumnWidth = terminalWidth - leftColumnWidth - 3;
+  // Left panel có fixed width để fit với logo và thông tin
+  const leftColumnWidth = 62;
+  const rightColumnWidth = Math.max(terminalWidth - leftColumnWidth - 3, 30);
 
   return (
-    <Box flexDirection="column" height={terminalHeight}>
+    <Box flexDirection="column">
       {/* Header with 2 columns */}
-      <Box borderStyle="round" borderColor="cyan" height={13}>
+      <Box borderStyle="round" borderColor="cyan" height={12}>
         {/* Left column */}
         <Box flexDirection="column" width={leftColumnWidth} paddingX={1}>
-          <Text color="gray">v1.0.0 - KhanhRomVN</Text>
-          <Text color="cyan"> </Text>
           <Text color="cyan">
             {"          ____                ___   _      ___"}
           </Text>
@@ -449,7 +539,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onExit }) => {
           <Text color="gray">│</Text>
           <Text color="gray">│</Text>
           <Text color="gray">│</Text>
-          <Text color="gray">│</Text>
         </Box>
 
         {/* Right column */}
@@ -458,12 +547,25 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onExit }) => {
             Recent conversations
           </Text>
           <Text> </Text>
-          <Text color="gray">No recent activity</Text>
+          {recentConversations.length > 0 ? (
+            recentConversations.slice(0, 8).map((conv) => (
+              <Box key={conv.id}>
+                <Text color="cyan">{conv.name}</Text>
+              </Box>
+            ))
+          ) : (
+            <Text color="gray">No recent conversations</Text>
+          )}
         </Box>
       </Box>
 
       {/* Messages Area */}
-      <Box flexDirection="column" flexGrow={1} overflow="hidden" paddingX={1}>
+      <Box
+        flexDirection="column"
+        height={chatAreaHeight}
+        overflow="hidden"
+        paddingX={1}
+      >
         {visibleMessages.map((msg) => (
           <Box key={msg.id} marginBottom={1}>
             <Box width={12}>
@@ -490,6 +592,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onExit }) => {
         borderColor="gray"
         paddingX={1}
         flexDirection="column"
+        height={inputAreaHeight}
       >
         {inputLines.map((line, index) => (
           <Box key={index}>
@@ -505,19 +608,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onExit }) => {
         ))}
       </Box>
 
-      {/* Command Suggestions Panel */}
-      {showCommandSuggestions && filteredCommands.length > 0 && (
+      {/* Status Bar or Command Panel */}
+      {showCommandSuggestions && filteredCommands.length > 0 ? (
         <Box
           flexDirection="column"
           borderStyle="round"
           borderColor="yellow"
           paddingX={1}
-          marginTop={1}
         >
           <Text color="yellow" bold>
             Available Commands:
           </Text>
-          {filteredCommands.map((cmd, index) => (
+          {filteredCommands.slice(0, 5).map((cmd, index) => (
             <Box key={cmd.name}>
               <Text color={index === selectedCommandIndex ? "green" : "white"}>
                 {index === selectedCommandIndex ? "→ " : "  "}
@@ -528,21 +630,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onExit }) => {
           ))}
           <Box marginTop={1}>
             <Text color="gray" dimColor>
-              ↑↓ Navigate • Tab/Enter Select • ESC Cancel
+              ↑↓ Navigate • Tab/Enter Select • Double ESC Cancel
             </Text>
           </Box>
         </Box>
+      ) : (
+        <Box height={statusBarHeight}>
+          <Text color="gray">? for help | / for commands</Text>
+          <Text color="gray"> • </Text>
+          <Text color="gray">⧉ In {path.basename(currentFolder)}</Text>
+        </Box>
       )}
-
-      {/* Status Bar */}
-      <Box>
-        <Text color="gray">Messages: {messages.length}</Text>
-        <Text color="gray"> • </Text>
-        <Text color="gray">
-          Enter Send • Shift+Enter New Line • Ctrl+C Exit • Ctrl+L Clear • /help
-          Commands
-        </Text>
-      </Box>
     </Box>
   );
 };

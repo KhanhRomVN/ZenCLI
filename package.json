@@ -9,17 +9,16 @@
   },
   "oclif": {
     "bin": "zencli",
-    "commands": "./lib/commands"
+    "commands": "./lib/cli/commands"
   },
   "files": [
     "bin",
     "lib",
-    "src/lib/electron-app.js",
     "npm-shrinkwrap.json"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && npm run copy-electron",
-    "copy-electron": "mkdir -p lib/lib && cp src/lib/electron-app.js lib/lib/electron-app.js",
+    "copy-electron": "mkdir -p lib/lib && cp src/core/lib/electron/electron-app.js lib/lib/electron-app.js",
     "dev": "tsc -w -p tsconfig.json",
     "postinstall": "npm run build",
     "prepublishOnly": "npm run build",
@@ -34,10 +33,14 @@
     "chalk": "^4.1.2",
     "cli-select": "^1.1.2",
     "conf": "^10.2.0",
+    "cors": "^2.8.5",
     "electron": "^39.2.6",
     "enquirer": "^2.4.1",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
     "figlet": "^1.6.0",
     "gradient-string": "^2.0.2",
+    "helmet": "^8.1.0",
     "ink": "^6.5.1",
     "ink-select-input": "^6.2.0",
     "ink-text-input": "^6.0.0",
@@ -53,7 +56,9 @@
   },
   "devDependencies": {
     "@types/chalk": "^2.2.0",
+    "@types/cors": "^2.8.19",
     "@types/electron": "^1.4.38",
+    "@types/express": "^5.0.6",
     "@types/figlet": "^1.5.8",
     "@types/gradient-string": "^1.1.3",
     "@types/inquirer": "^9.0.7",

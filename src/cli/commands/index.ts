@@ -6,9 +6,10 @@ import { ChatInterface } from "../components/ChatInterface.js";
 import { AccountManager } from "../components/AccountManager.js";
 import { SettingsManager } from "../components/SettingsManager.js";
 import { HelpScreen } from "../components/HelpScreen.js";
-import { storage } from "../lib/storage.js";
-import { authManager } from "../lib/auth-manager.js";
+import { storage } from "../../core/lib/storage.js";
+import { authManager } from "../../core/lib/auth-manager.js";
 import chalk from "chalk";
+import { logger } from "../../core/lib/logger.js";
 
 export default class Index extends Command {
   static description = "ZenCLI - Interactive Terminal UI for Claude AI";
@@ -21,6 +22,7 @@ export default class Index extends Command {
     "zencli --chat             # Start chat directly",
     "zencli --account          # Account management",
     "zencli --logs             # Show logs path",
+    "zencli --start-server     # Start local HTTP server (keep terminal open)",
   ];
 
   static flags = {
@@ -39,12 +41,21 @@ export default class Index extends Command {
     logs: Flags.boolean({
       description: "Show log directory path",
     }),
+    "start-server": Flags.boolean({
+      description: "Start local HTTP server (terminal must stay open)",
+    }),
     help: Flags.help({ char: "h" }),
     version: Flags.version({ char: "v" }),
   };
 
   async run(): Promise<void> {
     const { flags } = await this.parse(Index);
+
+    // Start server
+    if (flags["start-server"]) {
+      await this.startServerMode();
+      return;
+    }
 
     // Quick login
     if (flags.login) {
@@ -116,6 +127,7 @@ export default class Index extends Command {
   private showChat() {
     const account = storage.getActiveAccount();
     if (!account) {
+      logger.error("No active account found when starting chat");
       console.clear();
       console.log(chalk.red("❌ No active account found!"));
       console.log(chalk.cyan("\nTo add an account, run:"));
@@ -126,6 +138,8 @@ export default class Index extends Command {
       console.log();
       process.exit(1);
     }
+
+    logger.info("Starting chat interface", { accountName: account.name });
 
     const { waitUntilExit } = render(
       React.createElement(() => {
@@ -277,7 +291,7 @@ export default class Index extends Command {
   }
 
   private async showLogs() {
-    const { logger } = await import("../lib/logger.js");
+    const { logger } = await import("../../core/lib/logger.js");
     console.clear();
     console.log(chalk.bold.blue("📋 LOGS INFORMATION"));
     console.log();
@@ -315,5 +329,60 @@ export default class Index extends Command {
     }
 
     console.log();
+  }
+
+  private async startServerMode() {
+    console.clear();
+    console.log(chalk.bold.blue("🚀 ZENCLI LOCAL SERVER"));
+    console.log(chalk.gray("─".repeat(60)));
+    console.log();
+    console.log(chalk.yellow("⚠️  IMPORTANT:"));
+    console.log(chalk.white("   • Keep this terminal window open"));
+    console.log(
+      chalk.white("   • Server will stop if you close this terminal")
+    );
+    console.log(chalk.white("   • Press Ctrl+C to stop the server"));
+    console.log();
+    console.log(chalk.cyan("📡 Starting HTTP server..."));
+    console.log();
+
+    try {
+      const { startServer } = await import("../../server/index.js");
+
+      // Setup graceful shutdown
+      const shutdown = () => {
+        console.log();
+        console.log(chalk.yellow("\n⏳ Shutting down server..."));
+        logger.info("Server shutdown initiated", {}, "ServerCommand");
+        console.log(chalk.green("✅ Server stopped successfully"));
+        process.exit(0);
+      };
+
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+
+      // Start server (this will block)
+      await startServer();
+
+      // Keep process alive
+      await new Promise(() => {});
+    } catch (error: any) {
+      console.log();
+      console.log(chalk.red(`❌ Failed to start server: ${error.message}`));
+      console.log();
+      console.log(chalk.yellow("💡 Troubleshooting:"));
+      console.log(chalk.gray("   • Check if port 3000 is already in use"));
+      console.log(
+        chalk.gray("   • Try closing other applications using that port")
+      );
+      console.log(chalk.gray("   • Check firewall settings"));
+      console.log();
+      logger.error(
+        "Server startup failed",
+        { error: error.message },
+        "ServerCommand"
+      );
+      process.exit(1);
+    }
   }
 }

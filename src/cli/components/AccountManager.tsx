@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Text, Box, useInput } from "ink";
-import { storage } from "../lib/storage.js";
-import { authManager } from "../lib/auth-manager.js";
+import { storage } from "../../core/lib/storage.js";
+import { authManager } from "../../core/lib/auth-manager.js";
 
 interface AccountManagerProps {
   onBack: () => void;
