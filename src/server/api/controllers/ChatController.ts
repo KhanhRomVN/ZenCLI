@@ -39,29 +39,42 @@ export class ChatController {
 
   static async sendMessage(req: Request, res: Response) {
     try {
-      const { conversationId, parentMessageUuid, message, stream } =
-        req.body as ChatSendRequest;
+      const { accountId, conversationId, parentMessageUuid, message, stream } =
+        req.body as ChatSendRequest & { accountId: string };
 
-      // In the new flow, we use the active account.
-      const activeAccount = storage.getActiveAccount();
-      if (!activeAccount) {
-        return res
-          .status(401)
-          .json({ success: false, error: "No active account selected" });
+      // Validate required fields
+      if (!accountId) {
+        return res.status(400).json({
+          success: false,
+          error: "accountId is required",
+        });
       }
 
-      // If conversationId is missing, we might need to create one or handle it.
-      // For now assume standard flow where client provides IDs or empty for new.
+      if (!message) {
+        return res.status(400).json({
+          success: false,
+          error: "message is required",
+        });
+      }
+
+      // Get the account
+      const accounts = storage.getAccounts();
+      const account = accounts.find((a) => a.id === accountId);
+
+      if (!account) {
+        return res.status(404).json({
+          success: false,
+          error: "Account not found",
+        });
+      }
+
+      // Set as active account temporarily for this request
+      await storage.setActiveAccount(accountId);
 
       const apiClient = getApiClient();
 
       // Update account stats (Request count)
-      // Note: This logic for updating stats ideally belongs in a service layer or storage method
-      // that handles atomicity, but for this refactor we do it here.
-      // We need to fetch latest account data to ensure we don't overwrite.
-      const accounts = storage.getAccounts();
-      const accountIndex = accounts.findIndex((a) => a.id === activeAccount.id);
-
+      const accountIndex = accounts.findIndex((a) => a.id === accountId);
       if (accountIndex !== -1) {
         const acc = accounts[accountIndex];
         const today = new Date().toISOString().split("T")[0];
@@ -72,7 +85,6 @@ export class ChatController {
         }
         acc.dailyReqCount = (acc.dailyReqCount || 0) + 1;
 
-        // We will update tokens after response
         storage.saveAccounts(accounts);
       }
 
@@ -96,11 +108,6 @@ export class ChatController {
         // After stream ends
         res.write(`data: [DONE]\n\n`);
         res.end();
-
-        // Update output tokens estimation (rough)
-        // In a real app, API returns usage. Here we allow the apiClient to hopefully return it
-        // but since we are streaming, we might not get it in the callback easily unless changed.
-        // For now, let's just log it.
       } else {
         const result = await apiClient.sendMessage(
           conversationId,
@@ -111,9 +118,7 @@ export class ChatController {
         // Update usage stats if available
         if (result.inputTokens || result.outputTokens) {
           const currentAccounts = storage.getAccounts();
-          const accIdx = currentAccounts.findIndex(
-            (a) => a.id === activeAccount.id
-          );
+          const accIdx = currentAccounts.findIndex((a) => a.id === accountId);
           if (accIdx !== -1) {
             currentAccounts[accIdx].inputTokens =
               (currentAccounts[accIdx].inputTokens || 0) +
@@ -136,6 +141,7 @@ export class ChatController {
         logger.info(
           "Message sent",
           {
+            accountId,
             conversationId,
             inputTokens: result.inputTokens,
             outputTokens: result.outputTokens,

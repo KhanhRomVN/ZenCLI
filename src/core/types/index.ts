@@ -51,6 +51,8 @@ export interface Account {
   outputTokens: number;
 }
 
+export type ThemeType = "light" | "dark" | "auto";
+
 export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
