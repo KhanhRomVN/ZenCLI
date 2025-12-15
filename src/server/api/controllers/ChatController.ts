@@ -129,8 +129,14 @@ export class ChatController {
 
   static async sendMessage(req: Request, res: Response) {
     try {
-      let { accountId, conversationId, parentMessageUuid, message, stream } =
-        req.body as ChatSendRequest & { accountId: string };
+      let {
+        accountId,
+        conversationId,
+        parentMessageUuid,
+        message,
+        stream,
+        files,
+      } = req.body as ChatSendRequest & { accountId: string };
 
       // Validate required fields
       if (!accountId) {
@@ -221,7 +227,8 @@ export class ChatController {
           (chunk) => {
             res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
             fullContent += chunk;
-          }
+          },
+          files
         );
 
         // After stream ends
@@ -231,7 +238,9 @@ export class ChatController {
         const result = await apiClient.sendMessage(
           conversationId,
           parentMessageUuid,
-          message
+          message,
+          undefined,
+          files
         );
 
         // Update usage stats if available

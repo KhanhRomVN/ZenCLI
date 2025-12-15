@@ -1,1 +1,1 @@
-npm run build && npm link && zencli
+npm run build && npm link && zencli 

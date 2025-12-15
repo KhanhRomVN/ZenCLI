@@ -43,6 +43,7 @@ export interface ChatSendRequest {
   parentMessageUuid?: string;
   message: string;
   stream?: boolean;
+  files?: any[];
 }
 
 export interface ChatSendResponse {
