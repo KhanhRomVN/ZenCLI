@@ -27,10 +27,11 @@ export const HelpScreen: React.FC<HelpScreenProps> = ({ onBack }) => {
         <Text color="white">1. Add your first account:</Text>
         <Text color="cyan"> zencli --login</Text>
         <Text color="white">2. Start chatting with Claude:</Text>
-        <Text color="cyan"> zencli --chat</Text>
-        <Text color="white">or simply:</Text>
         <Text color="cyan"> zencli</Text>
-        <Text color="gray"> (Opens main menu)</Text>
+        <Text color="white">or:</Text>
+        <Text color="cyan"> zencli --chat</Text>
+        <Text color="white">3. Open main menu:</Text>
+        <Text color="cyan"> zencli --menu</Text>
       </Box>
 
       <Box flexDirection="column" marginBottom={2}>
@@ -38,11 +39,13 @@ export const HelpScreen: React.FC<HelpScreenProps> = ({ onBack }) => {
           📋 MAIN COMMANDS
         </Text>
         <Text color="cyan"> zencli </Text>
+        <Text color="gray"> Start chat directly (Default)</Text>
+        <Text color="cyan"> zencli --menu </Text>
         <Text color="gray"> Show main menu (TUI)</Text>
+        <Text color="cyan"> zencli --help </Text>
+        <Text color="gray"> Show this help screen</Text>
         <Text color="cyan"> zencli --login </Text>
         <Text color="gray"> Quick login - add new account</Text>
-        <Text color="cyan"> zencli --chat </Text>
-        <Text color="gray"> Start chat directly</Text>
         <Text color="cyan"> zencli --account </Text>
         <Text color="gray"> Manage accounts (TUI)</Text>
         <Text color="cyan"> zencli --logs </Text>

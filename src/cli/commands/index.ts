@@ -44,12 +44,23 @@ export default class Index extends Command {
     "start-server": Flags.boolean({
       description: "Start local HTTP server (terminal must stay open)",
     }),
-    help: Flags.help({ char: "h" }),
+    help: Flags.boolean({ char: "h", description: "Show interactive help" }),
+    menu: Flags.boolean({
+      char: "m",
+      description: "Open main menu",
+    }),
     version: Flags.version({ char: "v" }),
   };
 
   async run(): Promise<void> {
     const { flags } = await this.parse(Index);
+
+    // Show interactive help
+    const args = process.argv.slice(2);
+    if (flags.help || args.includes("--help") || args.includes("-h")) {
+      this.showHelp();
+      return;
+    }
 
     // Start server
     if (flags["start-server"]) {
@@ -75,14 +86,14 @@ export default class Index extends Command {
       return;
     }
 
-    // Direct to chat
-    if (flags.chat) {
-      this.showChat();
+    // Explicitly show main menu
+    if (flags.menu) {
+      this.showMainMenu();
       return;
     }
 
-    // Default: Show main menu
-    this.showMainMenu();
+    // Default: Start chat directly
+    this.showChat();
   }
 
   private showMainMenu() {
