@@ -3,7 +3,6 @@ import { render, Text, Box, useInput, useApp, Newline } from "ink";
 import { storage } from "../../core/lib/storage.js";
 import gradient from "gradient-string";
 import { menuConfig, MenuItem } from "../config/menuConfig.js";
-import figlet from "figlet";
 
 interface MainMenuProps {
   onSelect: (action: string) => void;
@@ -59,8 +58,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onSelect, onExit }) => {
         }
       }
 
-      // Esc or 'r': Go back
-      if (key.escape || input === "r") {
+      // Esc: Go back
+      if (key.escape) {
         if (navigationStack.length > 0) {
           const newStack = [...navigationStack];
           newStack.pop();
@@ -74,27 +73,12 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onSelect, onExit }) => {
             setCurrentMenu(parent.children || []);
           }
           setSelectedIndex(0);
-        } else {
-          // Ask to exit? Or just exit? User said "esc or ctrl+c to exit" at root
-          onExit();
-          exit();
         }
       }
     }
   );
 
-  const logoText = gradient([
-    "#ff0000",
-    "#ff8c00",
-    "#ffeb3b",
-    "#4caf50",
-    "#2196f3",
-    "#9c27b0",
-  ])(
-    figlet.textSync("ZenCLI", { font: "ANSI Shadow" }) // Or similar font to the ASCII art
-  );
-
-  // Custom simple ASCII as requested if figlet is too big, but let's try figlet first or static string
+  // Custom simple ASCII as requested
   const customLogo = gradient([
     "#ff0000",
     "#ff8c00",
@@ -190,8 +174,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onSelect, onExit }) => {
       {/* Footer */}
       <Box marginTop={1}>
         <Text color="gray">
-          arrow keys for navigation | enter to select | esc or ctrl+c to exit |
-          r to return
+          arrow keys for navigation | enter to select | esc to return | ctrl+c
+          to exit
         </Text>
       </Box>
     </Box>

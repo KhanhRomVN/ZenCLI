@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && npm run copy-electron",
-    "copy-electron": "mkdir -p lib/lib && cp src/core/lib/electron/electron-app.js lib/lib/electron-app.js",
+    "copy-electron": "mkdir -p lib/core/lib/electron && cp src/core/lib/electron/electron-app.cjs lib/core/lib/electron/electron-app.cjs",
     "dev": "tsc -w -p tsconfig.json",
     "postinstall": "npm run build",
     "prepublishOnly": "npm run build",

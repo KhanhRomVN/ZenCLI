@@ -187,6 +187,7 @@ export default class Index extends Command {
   }
 
   private async showChat() {
+    console.clear();
     const account = storage.getActiveAccount();
     if (!account) {
       // ... (Same logic as before)
@@ -214,6 +215,7 @@ export default class Index extends Command {
 
   // Wrap existing synced renders in promises or allow them to return
   private async showAccountManagement() {
+    console.clear();
     const { waitUntilExit } = render(
       React.createElement(AccountManager, {
         onBack: () => {
@@ -225,6 +227,7 @@ export default class Index extends Command {
   }
 
   private async showSettings() {
+    console.clear();
     const { waitUntilExit } = render(
       React.createElement(SettingsManager, {
         onBack: () => {
@@ -236,6 +239,7 @@ export default class Index extends Command {
   }
 
   private async showHelp() {
+    console.clear();
     const { waitUntilExit } = render(
       React.createElement(HelpScreen, {
         onBack: () => {
@@ -247,6 +251,7 @@ export default class Index extends Command {
   }
 
   private async showAutoCommit() {
+    console.clear();
     const { waitUntilExit } = render(
       React.createElement(AutoCommit, {
         onExit: () => {
@@ -258,6 +263,7 @@ export default class Index extends Command {
   }
 
   private async showServerRoutes() {
+    console.clear();
     const { waitUntilExit } = render(
       React.createElement(ServerRoutes, {
         onExit: () => {
@@ -269,6 +275,7 @@ export default class Index extends Command {
   }
 
   private async showPlaceholder(title: string) {
+    console.clear();
     const { waitUntilExit } = render(
       React.createElement(
         Box,

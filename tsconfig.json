@@ -17,6 +17,6 @@
     "allowSyntheticDefaultImports": true,
     "types": ["node"]
   },
-  "include": ["src/**/*", "lib/lib/electron-app.js"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "lib"]
 }
