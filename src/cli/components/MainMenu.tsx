@@ -132,12 +132,13 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onSelect, onExit }) => {
         borderStyle="single"
         borderColor="cyan"
         paddingX={1}
-        flexDirection="column"
+        flexDirection="row"
+        flexWrap="wrap"
         marginBottom={1}
         width="100%"
       >
         {currentMenu.map((item, index) => (
-          <Box key={item.value}>
+          <Box key={item.value} marginRight={10}>
             <Text
               color={selectedIndex === index ? "green" : "white"}
               bold={selectedIndex === index}
