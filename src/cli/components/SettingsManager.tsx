@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Text, Box, useInput } from "ink";
+import { Text, Box, useInput, useApp } from "ink";
 import { storage } from "../../core/lib/storage.js";
 
 interface SettingsManagerProps {
@@ -9,6 +9,7 @@ interface SettingsManagerProps {
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ onBack }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [message, setMessage] = useState("");
+  const { exit } = useApp();
 
   const currentModel = storage.getDefaultModel();
   const account = storage.getActiveAccount();
@@ -22,6 +23,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onBack }) => {
   const handleAction = async (action: string) => {
     if (action === "back") {
       onBack();
+      exit();
       return;
     }
 
@@ -39,6 +41,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onBack }) => {
     ) => {
       if (key.escape || input === "q" || input === "b") {
         onBack();
+        exit();
         return;
       }
 

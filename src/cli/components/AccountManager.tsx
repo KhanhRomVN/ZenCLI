@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Text, Box, useInput } from "ink";
+import { Text, Box, useInput, useApp } from "ink";
 import { storage } from "../../core/lib/storage.js";
 import { authManager } from "../../core/lib/auth-manager.js";
 
@@ -12,6 +12,9 @@ export const AccountManager: React.FC<AccountManagerProps> = ({ onBack }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const { exit } = useApp();
+
+  // ... (rest of state)
 
   const activeAccount = storage.getActiveAccount();
 
@@ -22,6 +25,8 @@ export const AccountManager: React.FC<AccountManagerProps> = ({ onBack }) => {
   const refreshAccounts = () => {
     setAccounts(storage.getAccounts());
   };
+
+  // ... (handlers)
 
   const handleAddAccount = async () => {
     setIsLoading(true);
@@ -60,6 +65,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({ onBack }) => {
     ) => {
       if (key.escape || input === "q" || input === "b") {
         onBack();
+        exit();
         return;
       }
 

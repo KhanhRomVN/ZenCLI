@@ -1,110 +1,197 @@
 import React, { useState, useEffect } from "react";
-import { render, Text, Box, useInput, useApp } from "ink";
+import { render, Text, Box, useInput, useApp, Newline } from "ink";
 import { storage } from "../../core/lib/storage.js";
 import gradient from "gradient-string";
+import { menuConfig, MenuItem } from "../config/menuConfig.js";
+import figlet from "figlet";
 
 interface MainMenuProps {
-  onSelect: (option: string) => void;
+  onSelect: (action: string) => void;
   onExit: () => void;
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({ onSelect, onExit }) => {
+  // Navigation State
+  const [navigationStack, setNavigationStack] = useState<MenuItem[]>([]);
+  const [currentMenu, setCurrentMenu] = useState<MenuItem[]>(menuConfig);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const { exit } = useApp();
-  const account = storage.getActiveAccount();
 
-  const options = [
-    { label: "💬 Start Chat", value: "chat" },
-    { label: "🔐 Add Account", value: "add-account" },
-    { label: "👥 Manage Accounts", value: "manage-accounts" },
-    { label: "⚙️ Settings", value: "settings" },
-    { label: "📖 Help", value: "help" },
-    { label: "🚪 Exit", value: "exit" },
-  ];
+  // Preview State (Dynamic based on selection)
+  const selectedItem = currentMenu[selectedIndex];
+  const previewItems = selectedItem?.children || [];
 
   useInput(
     (
       input: string,
-      key: { upArrow: any; downArrow: any; return: any; escape: any }
+      key: {
+        upArrow: boolean;
+        downArrow: boolean;
+        leftArrow: boolean;
+        rightArrow: boolean;
+        return: boolean;
+        escape: boolean;
+      }
     ) => {
-      if (key.upArrow) {
-        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : options.length - 1));
+      // Navigation: Left/Right for horizontal list (or Up/Down if we wrap? User asked for Arrow keys)
+      // Supporting both for grid-like feel
+      if (key.rightArrow || key.downArrow) {
+        setSelectedIndex((prev) =>
+          prev < currentMenu.length - 1 ? prev + 1 : 0
+        );
       }
 
-      if (key.downArrow) {
-        setSelectedIndex((prev) => (prev < options.length - 1 ? prev + 1 : 0));
+      if (key.leftArrow || key.upArrow) {
+        setSelectedIndex((prev) =>
+          prev > 0 ? prev - 1 : currentMenu.length - 1
+        );
       }
 
+      // Enter: Go deeper or Execute action
       if (key.return) {
-        const option = options[selectedIndex].value;
-        if (option === "exit") {
-          onExit();
-        } else {
-          onSelect(option);
+        if (selectedItem.children && selectedItem.children.length > 0) {
+          setNavigationStack((prev) => [...prev, selectedItem]);
+          setCurrentMenu(selectedItem.children);
+          setSelectedIndex(0);
+        } else if (selectedItem.action) {
+          onSelect(selectedItem.action);
+          exit();
         }
       }
 
-      if (input === "q" || input === "Q" || key.escape) {
-        onExit();
+      // Esc or 'r': Go back
+      if (key.escape || input === "r") {
+        if (navigationStack.length > 0) {
+          const newStack = [...navigationStack];
+          newStack.pop();
+          setNavigationStack(newStack);
+
+          // Re-calculate current menu based on new stack
+          if (newStack.length === 0) {
+            setCurrentMenu(menuConfig);
+          } else {
+            const parent = newStack[newStack.length - 1];
+            setCurrentMenu(parent.children || []);
+          }
+          setSelectedIndex(0);
+        } else {
+          // Ask to exit? Or just exit? User said "esc or ctrl+c to exit" at root
+          onExit();
+          exit();
+        }
       }
     }
   );
 
-  const headerText = gradient([
+  const logoText = gradient([
     "#ff0000",
     "#ff8c00",
     "#ffeb3b",
     "#4caf50",
     "#2196f3",
     "#9c27b0",
-  ])("ZenCLI");
+  ])(
+    figlet.textSync("ZenCLI", { font: "ANSI Shadow" }) // Or similar font to the ASCII art
+  );
+
+  // Custom simple ASCII as requested if figlet is too big, but let's try figlet first or static string
+  const customLogo = gradient([
+    "#ff0000",
+    "#ff8c00",
+    "#ffeb3b",
+    "#4caf50",
+    "#2196f3",
+    "#9c27b0",
+  ])(
+    ` ███████╗███████╗███╗   ██╗ ██████╗██╗     ██╗
+ ╚══███╔╝██╔════╝████╗  ██║██╔════╝██║     ██║
+   ███╔╝ █████╗  ██╔██╗ ██║██║     ██║     ██║
+  ███╔╝  ██╔══╝  ██║╚██╗██║██║     ██║     ██║
+ ███████╗███████╗██║ ╚████║╚██████╗███████╗██║
+ ╚══════╝╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝╚═╝
+            (made by KhanhRomVN)`
+  );
+
+  const breadcrumbPath = ["Home", ...navigationStack.map((i) => i.label)].join(
+    " - "
+  );
 
   return (
     <Box flexDirection="column" padding={1}>
-      <Box marginBottom={2}>
-        <Text bold color="cyan">
-          {headerText}
-        </Text>
-      </Box>
+      <Text>{customLogo}</Text>
+      <Newline />
 
-      <Text color="magenta" bold>
-        ✨ Claude AI Command Line Interface
+      {/* Breadcrumbs */}
+      <Text bold color="cyan">
+        {" "}
+        {breadcrumbPath}
       </Text>
-      <Text color="gray">{"─".repeat(50)}</Text>
 
-      <Box marginTop={1} marginBottom={2}>
-        {account ? (
-          <Box flexDirection="column">
-            <Text color="green" bold>
-              🟢 ACTIVE ACCOUNT
-            </Text>
-            <Text color="cyan">👤 {account.name}</Text>
-            {account.email && <Text color="cyan">📧 {account.email}</Text>}
-            <Text color="cyan">🔑 ID: {account.orgId.slice(0, 8)}...</Text>
-          </Box>
-        ) : (
-          <Text color="yellow">
-            ⚠️ No active account. Use `zencli auth login` to login.
-          </Text>
-        )}
-      </Box>
-
-      <Text color="blue" bold>
-        📖 MAIN MENU
-      </Text>
-      <Box flexDirection="column" marginTop={1}>
-        {options.map((option, index) => (
-          <Box key={option.value} marginBottom={1}>
-            <Text color={selectedIndex === index ? "green" : "white"}>
-              {selectedIndex === index ? "→ " : "  "}
-              {option.label}
+      {/* Top Box: Selection */}
+      <Box
+        borderStyle="single"
+        borderColor="cyan"
+        paddingX={1}
+        flexDirection="column"
+        marginBottom={1}
+        width="100%"
+      >
+        {currentMenu.map((item, index) => (
+          <Box key={item.value}>
+            <Text
+              color={selectedIndex === index ? "green" : "white"}
+              bold={selectedIndex === index}
+            >
+              {selectedIndex === index ? "→ " : "  "}[{index + 1}] {item.label}
             </Text>
           </Box>
         ))}
+        {currentMenu.length === 0 && (
+          <Text color="gray">No options available</Text>
+        )}
       </Box>
 
-      <Box marginTop={2}>
-        <Text color="gray">↑↓ Navigate • Enter Select • Q/ESC Exit</Text>
+      {/* Bottom Box: Preview */}
+      <Box
+        borderStyle="single"
+        borderColor="gray"
+        paddingX={1}
+        flexDirection="column"
+        minHeight={5}
+      >
+        {previewItems.length > 0 ? (
+          <Box flexDirection="column">
+            <Text color="gray" italic>
+              Preview:
+            </Text>
+            <Box flexDirection="row" flexWrap="wrap">
+              {previewItems.map((child, idx) => (
+                <Box key={child.value} marginRight={2}>
+                  <Text color="gray">
+                    [{idx + 1}] {child.label}
+                  </Text>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        ) : (
+          <Box flexDirection="column">
+            <Text color="gray" italic>
+              Description:
+            </Text>
+            <Text color="white">
+              {selectedItem?.description || "No description"}
+            </Text>
+          </Box>
+        )}
+      </Box>
+
+      {/* Footer */}
+      <Box marginTop={1}>
+        <Text color="gray">
+          arrow keys for navigation | enter to select | esc or ctrl+c to exit |
+          r to return
+        </Text>
       </Box>
     </Box>
   );
