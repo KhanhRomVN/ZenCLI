@@ -1,11 +1,14 @@
 {
-  "name": "zencli",
+  "name": "@khanhromvn/zencli",
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A CLI tool for interacting with Claude AI",
   "main": "lib/bin/run.js",
   "bin": {
     "zencli": "./bin/run.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "oclif": {
     "bin": "zencli",
@@ -20,7 +23,6 @@
     "build": "tsc -p tsconfig.json && npm run copy-electron",
     "copy-electron": "mkdir -p lib/core/lib/electron && cp src/core/lib/electron/electron-app.cjs lib/core/lib/electron/electron-app.cjs",
     "dev": "tsc -w -p tsconfig.json",
-    "postinstall": "npm run build",
     "prepublishOnly": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint src/**/*.ts",
@@ -87,10 +89,10 @@
     "anthropic",
     "zencli"
   ],
-  "author": "Your Name",
+  "author": "Khanh Rom",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/zencli"
+    "url": "https://github.com/khanhromvn/zencli"
   }
 }
