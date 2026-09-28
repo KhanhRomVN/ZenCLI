@@ -1,0 +1,84 @@
+/**
+ * ------------------------------------------------------------------
+ * Path Service
+ * ------------------------------------------------------------------
+ * Quản lý đường dẫn tập trung cho thư mục context của dự án.
+ *
+ * Main functions:
+ * - getContextRoot()       : Trả về đường dẫn gốc ~/.khanhromvn-zen
+ * - getProjectContextDir() : Trả về đường dẫn context cho workspace
+ *                            (dùng hash MD5)
+ * ------------------------------------------------------------------
+ */
+
+import * as path from "path";
+import * as crypto from "crypto";
+import * as os from "os";
+
+export class PathService {
+  private static instance: PathService;
+
+  private constructor() {}
+
+  public static getInstance(): PathService {
+    if (!PathService.instance) {
+      PathService.instance = new PathService();
+    }
+    return PathService.instance;
+  }
+
+  public getContextRoot(): string {
+    return path.join(os.homedir(), ".khanhromvn-zen");
+  }
+
+  public getProjectContextDir(workspaceFolderPath: string): string {
+    const hash = crypto
+      .createHash("md5")
+      .update(workspaceFolderPath)
+      .digest("hex");
+    return path.join(this.getContextRoot(), "projects", hash);
+  }
+
+  /**
+   * Thư mục riêng của một conversation:
+   * ~/.khanhromvn-zen/projects/{hash}/{conversationId}/
+   */
+  public getConversationDir(
+    workspaceFolderPath: string,
+    conversationId: string,
+  ): string {
+    return path.join(
+      this.getProjectContextDir(workspaceFolderPath),
+      conversationId,
+    );
+  }
+
+  /**
+   * Đường dẫn file JSON chính của conversation (nằm TRONG folder):
+   * ~/.khanhromvn-zen/projects/{hash}/{conversationId}/{conversationId}.json
+   */
+  public getConversationJsonPath(
+    workspaceFolderPath: string,
+    conversationId: string,
+  ): string {
+    return path.join(
+      this.getConversationDir(workspaceFolderPath, conversationId),
+      `${conversationId}.json`,
+    );
+  }
+
+  /**
+   * Legacy path (cấu trúc cũ — file nằm thẳng trong projectContextDir):
+   * ~/.khanhromvn-zen/projects/{hash}/{conversationId}.json
+   * Dùng để detect và migrate file cũ.
+   */
+  public getLegacyConversationJsonPath(
+    workspaceFolderPath: string,
+    conversationId: string,
+  ): string {
+    return path.join(
+      this.getProjectContextDir(workspaceFolderPath),
+      `${conversationId}.json`,
+    );
+  }
+}
