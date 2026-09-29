@@ -2,6 +2,8 @@ import React, { useState, useCallback } from "react";
 import { Box, Text } from "ink";
 import { useImeInput } from "../../hooks/useImeInput";
 
+type PromptLength = 'none' | 'short' | 'medium' | 'long';
+
 interface TextInputProps {
   onSubmit: (value: string) => void;
   placeholder?: string;
@@ -9,6 +11,10 @@ interface TextInputProps {
   onCommandToggle?: (visible: boolean) => void;
   /** When false, input shows red border and blocks submission */
   isConnected?: boolean;
+  /** Current prompt length mode */
+  promptLength?: PromptLength;
+  /** Callback to cycle through prompt lengths when Tab is pressed */
+  onCyclePromptLength?: () => void;
 }
 
 /**
@@ -29,6 +35,8 @@ export function TextInput({
   onShortcutsToggle,
   onCommandToggle,
   isConnected = true,
+  promptLength = 'medium', // Kept for type compatibility but not used for rendering here anymore
+  onCyclePromptLength,
 }: TextInputProps): React.JSX.Element {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
@@ -107,6 +115,7 @@ export function TextInput({
   const { value, isComposing } = useImeInput({
     onSubmit: handleSubmitWithToggle,
     onChange: handleChange,
+    onTabPress: onCyclePromptLength,
   });
 
   // Display value as-is — "?" and "/" are only stripped when they are the sole character (toggle triggers)
@@ -132,7 +141,7 @@ export function TextInput({
         <Text>{displayText}</Text>
       )}
       {/* Cursor indicator */}
-      <Text inverse> </Text>
+      <Text color="cyan">▌</Text>
     </Box>
   );
 }

@@ -17,19 +17,35 @@
  */
 
 import { EventEmitter } from "events";
+import * as os from "os";
 import type { Message, QuestionAnswer } from "../types/message";
 import { parseAIResponse } from "../parsers/ResponseParser";
 import { StreamingService } from "./StreamingService";
 import { processClaudeContent } from "./ClaudeContentProcessor";
 import type { ToolAction, ParsedResponse } from "../parsers/ResponseParser";
+import { combinePromptsForMode } from "../prompts";
+import type { SystemPromptMode, PromptLengthMode } from "../prompts";
+import type { SystemInfo } from "../prompts/system-context";
+import { buildSkillsSection } from "./SkillService";
 
 // ─── Types ──────────────────────────────────────────────────────────────
+
+/** Runtime flags điều khiển system prompt — được cập nhật realtime từ UI */
+export interface RuntimeFlags {
+  promptLengthMode: PromptLengthMode;
+  systemPromptMode: SystemPromptMode;
+  diagnosticEnabled: boolean;
+  skillsEnabled: boolean;
+}
 
 export interface ChatServiceConfig {
   apiUrl: string;
   workspacePath: string;
   aiLanguage: string;
   permissionMode: string;
+  /** Runtime flags — đọc mỗi lần build system prompt (không snapshot lúc khởi tạo).
+   *  Trả về undefined nếu chưa có getter được nối từ UI → coi như không gửi system prompt. */
+  getRuntimeFlags?: () => RuntimeFlags | undefined;
 }
 
 export interface SendMessageOptions {
@@ -58,13 +74,49 @@ export interface ChatServiceEvents {
   error: (error: Error) => void;
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────
 
 const calculateTokens = (text: string): number => {
   if (!text) return 0;
   return Math.ceil(text.length / 4);
 };
 
+/**
+ * Build system prompt từ runtime flags hiện tại.
+ * Trả về "" khi promptLengthMode === "none" (ẩn hoàn toàn).
+ */
+function buildSystemPromptForFlags(
+  config: ChatServiceConfig,
+  providerId?: string,
+): string {
+  const flags = config.getRuntimeFlags?.();
+  if (!flags) return "";
+
+  // NONE → không gửi system prompt nào cả
+  if (flags.promptLengthMode === "none") return "";
+
+  const systemInfo: SystemInfo = {
+    os: process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux",
+    shell: process.env.SHELL || "/bin/bash",
+    homeDir: os.homedir(),
+    cwd: config.workspacePath,
+    language: config.aiLanguage,
+  };
+
+  const basePrompt = combinePromptsForMode(
+    {
+      language: config.aiLanguage,
+      systemInfo,
+      promptLengthMode: flags.promptLengthMode,
+      diagnosticEnabled: flags.diagnosticEnabled,
+    },
+    flags.systemPromptMode,
+  );
+
+  // Append installed-skills section when toggle is ON (mirrors webview PromptBuilder)
+  if (!flags.skillsEnabled) return basePrompt;
+  return `${basePrompt}${buildSkillsSection()}`;
+}
 /**
  * Parse <question-answer> tag from user content.
  */
@@ -156,6 +208,14 @@ export class ChatService extends EventEmitter {
   }
 
   // ─── Setters ──────────────────────────────────────────────────────────
+
+  setLastUsedModel(model: { id: string; providerId: string } | null): void {
+    this.lastUsedModel = model;
+  }
+
+  setLastUsedAccount(account: { id: string; email?: string } | null): void {
+    this.lastUsedAccount = account;
+  }
 
   setMessages(messages: Message[]): void {
     this.messages = messages;
@@ -322,11 +382,40 @@ export class ChatService extends EventEmitter {
     if (finalModel) this.lastUsedModel = finalModel;
     if (finalAccount) this.lastUsedAccount = finalAccount;
 
+    // Guard: cannot send without a model selected
+    if (!finalModel && !skipFirstRequestLogic) {
+      const errorMsg: Message = {
+        id: `msg-${Date.now()}-error`,
+        role: "assistant",
+        content: "⚠ No model selected. Please use /model-account to choose a provider and model first.",
+        timestamp: Date.now(),
+        isError: true,
+      };
+      this.messages = [...this.messages.filter((m) => !m.isCancelled), errorMsg];
+      this.emit("messagesUpdated", this.messages);
+      return;
+    }
+
     // Build user message content
     // For CLI: simplified prompt building (no workspace tree, no file upload)
-    const promptPayload = skipFirstRequestLogic
+    let promptPayload = skipFirstRequestLogic
       ? content
       : `## User Message\n<user-message>\n${content}\n</user-message>`;
+
+    // On the first request of a session, prepend the system prompt directly
+    // into the user message content — mirroring the webview's PromptBuilder
+    // approach (`${systemPrompt}\n\n${fullContent}`). The backend API does not
+    // accept a separate role:"system" message; it expects everything inside
+    // the messages array as user/assistant turns.
+    if (isReq1 && !skipFirstRequestLogic) {
+      const systemPrompt = buildSystemPromptForFlags(
+        this.config,
+        finalModel?.providerId,
+      );
+      if (systemPrompt) {
+        promptPayload = `${systemPrompt}\n\n${promptPayload}`;
+      }
+    }
 
     const userMessage: Message = {
       id: `msg-${Date.now()}-${skipFirstRequestLogic ? "tool" : "user"}`,
@@ -367,7 +456,10 @@ export class ChatService extends EventEmitter {
     this.setProcessing(true);
 
     try {
-      // Prepare messages for API
+      // Prepare messages for API.
+      // System prompt is already embedded in the first user message's content
+      // (see promptPayload construction above), so no separate role:"system"
+      // entry is needed here — the backend expects plain user/assistant turns.
       const payloadMessages = updatedMessages
         .filter((m) => !m.isError)
         .map((m) => ({ role: m.role, content: m.content }));

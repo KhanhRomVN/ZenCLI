@@ -19,6 +19,7 @@ import { useInput } from "ink";
 interface UseImeInputOptions {
   onSubmit: (value: string) => void;
   onChange?: (value: string) => void;
+  onTabPress?: () => void;
 }
 
 interface UseImeInputResult {
@@ -31,6 +32,7 @@ const COMPOSITION_TIMEOUT = 800; // ms — wait before committing IME buffer
 export function useImeInput({
   onSubmit,
   onChange,
+  onTabPress,
 }: UseImeInputOptions): UseImeInputResult {
   const [value, setValue] = useState("");
   const [isComposing, setIsComposing] = useState(false);
@@ -91,10 +93,15 @@ export function useImeInput({
     // Ctrl/meta combinations are ignored
     if (key.ctrl || key.meta) return;
 
-    // Arrow keys and other special keys are ignored
+    // Arrow keys are ignored
     if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow)
       return;
-    if (key.tab) return;
+    
+    // Tab triggers prompt length cycling
+    if (key.tab) {
+      onTabPress?.();
+      return;
+    }
 
     // Regular printable character
     if (input) {

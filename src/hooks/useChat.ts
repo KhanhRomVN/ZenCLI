@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { ChatService } from "../services/ChatService";
+import type { RuntimeFlags } from "../services/ChatService";
 import type { Message } from "../types/message";
 import type { SendMessageOptions } from "../services/ChatService";
 
@@ -16,6 +17,9 @@ export interface UseChatConfig {
   workspacePath: string;
   aiLanguage?: string;
   permissionMode?: string;
+  /** Getter trả về runtime flags hiện tại — gọi mỗi lần build system prompt.
+   *  Optional: nếu không truyền, ChatService sẽ không gửi system prompt. */
+  getRuntimeFlags?: () => RuntimeFlags | undefined;
 }
 
 export interface UseChatReturn {
@@ -35,6 +39,11 @@ export interface UseChatReturn {
 }
 
 export function useChat(config: UseChatConfig): UseChatReturn {
+  // Keep latest getRuntimeFlags in a ref so the stable ChatService instance
+  // always reads current values without needing re-instantiation.
+  const getRuntimeFlagsRef = useRef(config.getRuntimeFlags);
+  getRuntimeFlagsRef.current = config.getRuntimeFlags;
+
   // Create stable ChatService instance
   const serviceRef = useRef<ChatService | null>(null);
   if (!serviceRef.current) {
@@ -43,6 +52,10 @@ export function useChat(config: UseChatConfig): UseChatReturn {
       workspacePath: config.workspacePath,
       aiLanguage: config.aiLanguage || "vi",
       permissionMode: config.permissionMode || "fullAccess",
+      getRuntimeFlags: () => {
+        const fn = getRuntimeFlagsRef.current;
+        return fn ? fn() : undefined;
+      },
     });
   }
   const chatService = serviceRef.current;

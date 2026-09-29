@@ -34,9 +34,8 @@
   ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsx src/cli.tsx",
+    "dev": "node scripts/clear-log.mjs && tsx src/cli.tsx",
     "start": "tsx src/cli.tsx",
-    "log": "node scripts/tail-cli-log.mjs",
     "lint": "eslint src",
     "test": "echo \"No tests yet\" && exit 0"
   },

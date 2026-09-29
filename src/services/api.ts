@@ -13,12 +13,25 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
+// ─── File Logger ──────────────────────────────────────────────────────────────
+const LOG_FILE = path.join(process.cwd(), "log.log");
+
+export function logToFile(message: string): void {
+  try {
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(LOG_FILE, `[${timestamp}] ${message}\n`, "utf-8");
+  } catch {
+    // Silently ignore logging errors to avoid disrupting the app
+  }
+}
+
 // ─── Types ──────────────────────────────────────────────────────────────
 
 export interface Provider {
   provider_id: string;
   provider_name: string;
   is_enabled: boolean;
+  website?: string;
   models: { id: string; name?: string }[];
 }
 
@@ -42,6 +55,9 @@ export interface Account {
   total_requests?: number;
   successful_requests?: number;
   total_tokens?: number;
+  period_requests?: number;
+  period_tokens?: number;
+  auth_method?: string;
   user_data_dir?: string;
 }
 
@@ -123,16 +139,29 @@ export async function fetchAccounts(
 ): Promise<Account[]> {
   const params = new URLSearchParams();
   if (providerId) params.append("provider_id", providerId);
+  // Backend yêu cầu clientId để trả đúng danh sách account theo database hiện tại.
+  // Tham chiếu ProviderModelDrawer.tsx: luôn kèm clientId khi gọi /v1/accounts.
+  const clientId = process.env.ZEN_CLIENT_ID || process.env.CLIENT_ID || "";
+  if (clientId) params.append("clientId", clientId);
 
   const query = params.toString();
   const endpoint = `/v1/accounts${query ? `?${query}` : ""}`;
 
-  const result = await callBackend<{
-    success: boolean;
-    data: { accounts: Account[] };
-  }>(endpoint);
+  logToFile(`fetchAccounts: endpoint=${endpoint}, providerId=${providerId ?? "(none)"}, clientId=${clientId || "(empty)"}`);
 
-  return result.success && result.data?.accounts ? result.data.accounts : [];
+  try {
+    const result = await callBackend<{
+      success: boolean;
+      data: { accounts: Account[] };
+    }>(endpoint);
+
+    logToFile(`fetchAccounts response: success=${result.success}, accountsCount=${result.data?.accounts?.length ?? "N/A"}, raw=${JSON.stringify(result).slice(0, 500)}`);
+
+    return result.success && result.data?.accounts ? result.data.accounts : [];
+  } catch (err) {
+    logToFile(`fetchAccounts ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    return [];
+  }
 }
 
 export async function createAccount(
