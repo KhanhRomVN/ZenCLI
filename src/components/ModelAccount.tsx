@@ -325,16 +325,13 @@ export function ModelAccount({
         : "Enter to set as default · Esc to return model";
 
   return (
-    <Box flexDirection="column" marginTop={1}>
-      <Box flexDirection="column" paddingX={1}>
-        <Box flexDirection="column" width="100%">
-          <Box borderStyle="single" borderColor="gray" borderBottom={false} borderLeft={false} borderRight={false} width="100%" />
-          <Box paddingX={1} flexDirection="column">
-            <Text bold color="yellow">
-              {title}
-            </Text>
-            <Text dimColor>{STEP_DESCRIPTIONS[step]}</Text>
-          </Box>
+    <Box flexDirection="column">
+      <Box flexDirection="column">
+        <Box flexDirection="column">
+          <Text bold color="yellow">
+            {title}
+          </Text>
+          <Text dimColor>{STEP_DESCRIPTIONS[step]}</Text>
         </Box>
         <Box flexDirection="column" marginTop={1}>
           {currentItems.map((item, i) => {

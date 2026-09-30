@@ -1,8 +1,6 @@
-import React, { useState, useCallback } from "react";
-import { Box, Text } from "ink";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { Box, Text, useApp } from "ink";
 import { useImeInput } from "../../hooks/useImeInput";
-
-type PromptLength = 'none' | 'short' | 'medium' | 'long';
 
 interface TextInputProps {
   onSubmit: (value: string) => void;
@@ -11,10 +9,10 @@ interface TextInputProps {
   onCommandToggle?: (visible: boolean) => void;
   /** When false, input shows red border and blocks submission */
   isConnected?: boolean;
-  /** Current prompt length mode */
-  promptLength?: PromptLength;
-  /** Callback to cycle through prompt lengths when Tab is pressed */
-  onCyclePromptLength?: () => void;
+  /** Callback to toggle thinking mode when Tab is pressed */
+  onToggleThinking?: () => void;
+  /** Callback to notify parent about exit countdown state changes */
+  onExitStateChange?: (countdown: number | null) => void;
 }
 
 /**
@@ -35,11 +33,56 @@ export function TextInput({
   onShortcutsToggle,
   onCommandToggle,
   isConnected = true,
-  promptLength = 'medium', // Kept for type compatibility but not used for rendering here anymore
-  onCyclePromptLength,
+  onToggleThinking,
+  onExitStateChange,
 }: TextInputProps): React.JSX.Element {
+  const { exit } = useApp();
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
+  const [exitCountdown, setExitCountdown] = useState<number | null>(null);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Sync countdown state to parent
+  useEffect(() => {
+    onExitStateChange?.(exitCountdown);
+  }, [exitCountdown, onExitStateChange]);
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    };
+  }, []);
+
+  const performExit = useCallback(() => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    setExitCountdown(null);
+    exit(); // Use Ink's clean exit method
+  }, [exit]);
+
+  const startExitCountdown = useCallback(() => {
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    
+    let secondsLeft = 3;
+    setExitCountdown(secondsLeft);
+    
+    countdownIntervalRef.current = setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft <= 0) {
+        // Timeout reached without second press: Cancel countdown, do NOT exit
+        if (countdownIntervalRef.current) {
+          clearInterval(countdownIntervalRef.current);
+          countdownIntervalRef.current = null;
+        }
+        setExitCountdown(null);
+      } else {
+        setExitCountdown(secondsLeft);
+      }
+    }, 1000);
+  }, []);
 
   const setShortcutsVisible = useCallback(
     (visible: boolean) => {
@@ -112,10 +155,30 @@ export function TextInput({
     ],
   );
 
-  const { value, isComposing } = useImeInput({
+  const { value, isComposing, clearValue } = useImeInput({
     onSubmit: handleSubmitWithToggle,
     onChange: handleChange,
-    onTabPress: onCyclePromptLength,
+    onTabPress: onToggleThinking,
+    onCtrlC: (currentValue) => {
+      if (currentValue.length > 0) {
+        // Clear input if there's text
+        clearValue();
+        // Cancel any ongoing exit countdown if present
+        if (countdownIntervalRef.current) {
+          clearInterval(countdownIntervalRef.current);
+          setExitCountdown(null);
+        }
+      } else {
+        // Empty input
+        if (exitCountdown !== null) {
+          // Already counting down -> Exit immediately on second press
+          performExit();
+        } else {
+          // Not counting down -> Start countdown
+          startExitCountdown();
+        }
+      }
+    },
   });
 
   // Display value as-is — "?" and "/" are only stripped when they are the sole character (toggle triggers)

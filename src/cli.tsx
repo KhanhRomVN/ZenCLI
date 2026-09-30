@@ -8,4 +8,5 @@ render(
   <ThemeProvider theme={defaultTheme}>
     <App />
   </ThemeProvider>,
+  { exitOnCtrlC: false },
 );

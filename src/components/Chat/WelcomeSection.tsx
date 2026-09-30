@@ -21,9 +21,10 @@ interface WelcomeSectionProps {
 
 /**
  * ASCII art welcome banner displayed when no messages exist.
- * Extracted from Chat.tsx for reuse and independent visibility control.
+ * Wrapped in React.memo to prevent unnecessary re-renders during terminal resize events,
+ * which causes visual artifacts (stacking/duplication) in Ink TUIs if the component tree updates too frequently.
  */
-export function WelcomeSection({
+export const WelcomeSection = React.memo(function WelcomeSection({
   providerName,
   modelName,
   email,
@@ -70,4 +71,4 @@ export function WelcomeSection({
       <Text color="yellow">{"  ▀▀████▀▀    "}</Text>
     </Box>
   );
-}
+});

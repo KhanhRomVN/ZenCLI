@@ -55,13 +55,14 @@ function getToolLabel(type: string): string {
 // SUMMARY BUILDERS — one per tool type
 // ============================================================================
 
-function buildReadSummary(params: Record<string, any>, output?: ToolOutput): string {
-  const filePath = params.file_path || params.path || "";
-  if (output && !output.isError && output.output) {
-    const lineCount = output.output.split("\n").length;
-    return `Read ${lineCount} lines from ${filePath}`;
+function buildReadSummary(_params: Record<string, any>, output?: ToolOutput): string {
+  // Always show the actual number of lines read once the tool has produced output.
+  // Falls back to a neutral placeholder while the executor is still running.
+  if (output && !output.isError && typeof output.output === "string" && output.output.length > 0) {
+    const lineCount = output.output.split(/\r?\n/).filter((l) => l.trim().length > 0).length;
+    return `Read ${lineCount} lines`;
   }
-  return `Read ${filePath}`;
+  return "Reading file...";
 }
 
 function buildWriteSummary(params: Record<string, any>): string {
@@ -238,16 +239,18 @@ export function ToolRenderer({
 
   const summary = buildSummary(action, output);
 
-  // Color coding based on state
+  // Color coding based on state.
+  // The bullet stays semantic (green/red/yellow), but the tool label itself
+  // is rendered in white per UI spec — keeping it readable regardless of status.
   const headerColor = isError ? "red" : isActionClicked ? "green" : "yellow";
   const detailColor = isError ? "red" : undefined;
 
   return (
     <Box flexDirection="column" marginBottom={0}>
-      {/* Header line: ● ToolName(param) */}
+      {/* Header line: ● ToolName(param) — label always white */}
       <Box>
         <Text color={headerColor}>{"● "}</Text>
-        <Text bold color={headerColor}>
+        <Text bold color="white">
           {label}
         </Text>
         {primaryParam ? (

@@ -238,20 +238,15 @@ export function Account({
 
   // --- Render account list ---
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="single"
-      borderColor="cyan"
-      paddingX={1}
-    >
+    <Box flexDirection="column">
       <Text bold color="yellow">
         {"Account Management"}
       </Text>
-      <Text dimColor>{"↑↓ navigate · D delete · Esc close"}</Text>
+      <Text dimColor>{"Manage provider accounts for authentication."}</Text>
       <Box flexDirection="column" marginTop={1}>
         {loading && <Text dimColor>Loading...</Text>}
         {!loading && accounts.length === 0 && (
-          <Text dimColor>No accounts found</Text>
+          <Text dimColor>No accounts found. Press 'a' to add one.</Text>
         )}
         {accounts.map((acc, i) => (
           <Box key={acc.id}>
@@ -270,6 +265,9 @@ export function Account({
           </Text>
           <Text color="green">{"+ Add new account"}</Text>
         </Box>
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>{"↑↓ navigate · Enter select · A add · D delete · Esc close"}</Text>
       </Box>
     </Box>
   );

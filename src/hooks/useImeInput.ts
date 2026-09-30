@@ -20,11 +20,14 @@ interface UseImeInputOptions {
   onSubmit: (value: string) => void;
   onChange?: (value: string) => void;
   onTabPress?: () => void;
+  /** Called when Ctrl+C is pressed. Receives the current input value. */
+  onCtrlC?: (currentValue: string) => void;
 }
 
 interface UseImeInputResult {
   value: string;
   isComposing: boolean;
+  clearValue: () => void;
 }
 
 const COMPOSITION_TIMEOUT = 800; // ms — wait before committing IME buffer
@@ -33,6 +36,7 @@ export function useImeInput({
   onSubmit,
   onChange,
   onTabPress,
+  onCtrlC,
 }: UseImeInputOptions): UseImeInputResult {
   const [value, setValue] = useState("");
   const [isComposing, setIsComposing] = useState(false);
@@ -90,7 +94,14 @@ export function useImeInput({
       return;
     }
 
-    // Ctrl/meta combinations are ignored
+    // Handle Ctrl+C explicitly before ignoring other ctrl/meta combos
+    if (key.ctrl && input === 'c') {
+      clearTimer();
+      onCtrlC?.(value);
+      return;
+    }
+
+    // Other Ctrl/meta combinations are ignored
     if (key.ctrl || key.meta) return;
 
     // Arrow keys are ignored
@@ -118,5 +129,12 @@ export function useImeInput({
     }
   });
 
-  return { value, isComposing };
+  const clearValue = useCallback(() => {
+    clearTimer();
+    setValue("");
+    setIsComposing(false);
+    onChange?.("");
+  }, [clearTimer, onChange]);
+
+  return { value, isComposing, clearValue };
 }

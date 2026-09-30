@@ -88,14 +88,12 @@ export function Settings({
   if (!isOpen) return null;
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="single"
-      borderColor="cyan"
-      paddingX={1}
-    >
+    <Box flexDirection="column">
+      <Text bold color="yellow">Settings</Text>
+      <Text dimColor>{"Configure application preferences and view info."}</Text>
+
       {/* Tab bar */}
-      <Box>
+      <Box marginTop={1}>
         {TABS.map((tab) => (
           <Box key={tab.id} marginRight={2}>
             <Text
@@ -107,7 +105,6 @@ export function Settings({
           </Box>
         ))}
       </Box>
-      <Text dimColor>{"←→ switch tabs · Esc close"}</Text>
 
       <Box flexDirection="column" marginTop={1}>
         {activeTab === "general" && (
@@ -128,9 +125,6 @@ export function Settings({
                 <Text dimColor>Type new URL, Enter to save, Esc to cancel</Text>
               </Box>
             )}
-            <Box marginTop={1}>
-              <Text dimColor>{"  Press Enter on URL to edit"}</Text>
-            </Box>
           </Box>
         )}
 
@@ -144,6 +138,10 @@ export function Settings({
             </Box>
           </Box>
         )}
+      </Box>
+      
+      <Box marginTop={1}>
+        <Text dimColor>{"←→ switch tabs · Enter edit · Esc close"}</Text>
       </Box>
     </Box>
   );

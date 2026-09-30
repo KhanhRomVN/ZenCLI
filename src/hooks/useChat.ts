@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { ChatService } from "../services/ChatService";
 import type { RuntimeFlags } from "../services/ChatService";
+import { ToolExecutionService } from "../services/ToolExecutionService";
 import type { Message } from "../types/message";
 import type { SendMessageOptions } from "../services/ChatService";
 
@@ -60,12 +61,39 @@ export function useChat(config: UseChatConfig): UseChatReturn {
   }
   const chatService = serviceRef.current;
 
+  // Create stable ToolExecutionService instance — wires the auto-loop between
+  // ChatService's "toolRequest" event and executor dispatch.
+  const toolExecRef = useRef<ToolExecutionService | null>(null);
+  if (!toolExecRef.current) {
+    toolExecRef.current = new ToolExecutionService({
+      workspacePath: config.workspacePath,
+      sendMessage: (opts) => chatService.sendMessage(opts),
+      getMessages: () => chatService.getMessages(),
+      setMessages: (msgs) => chatService.setMessages(msgs),
+    });
+  }
+  const toolExecutionService = toolExecRef.current;
+
   // React state mirrors
   const [messages, setMessagesState] = useState<Message[]>([]);
   const [isProcessing, setIsProcessingState] = useState(false);
   const [isStreaming, setIsStreamingState] = useState(false);
   const [isContinuing, setIsContinuingState] = useState(false);
   const [currentConversationId, setCurrentConversationIdState] = useState("");
+
+  // Attach/detach the toolRequest listener on mount/unmount.
+  useEffect(() => {
+    const detach = toolExecutionService.attach(chatService);
+    return detach;
+  }, [chatService, toolExecutionService]);
+
+  // Reset internal tool-execution bookkeeping whenever a new session starts
+  // (detected by conversationId becoming empty AND no messages left).
+  useEffect(() => {
+    if (!currentConversationId && messages.length === 0) {
+      toolExecutionService.reset();
+    }
+  }, [currentConversationId, messages.length, toolExecutionService]);
 
   // Sync service → React state via events
   useEffect(() => {

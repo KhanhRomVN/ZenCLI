@@ -138,16 +138,11 @@ export function History({
   };
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="single"
-      borderColor="cyan"
-      paddingX={1}
-    >
+    <Box flexDirection="column">
       <Text bold color="yellow">
         {"Conversation History"}
       </Text>
-      <Text dimColor>{"↑↓ navigate · Enter load · Esc close"}</Text>
+      <Text dimColor>{"View and restore previous sessions."}</Text>
       <Box flexDirection="column" marginTop={1}>
         {loading && <Text dimColor>Loading...</Text>}
         {!loading && conversations.length === 0 && (
@@ -167,6 +162,9 @@ export function History({
             )}
           </Box>
         ))}
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>{"↑↓ navigate · Enter load · Esc close"}</Text>
       </Box>
     </Box>
   );
