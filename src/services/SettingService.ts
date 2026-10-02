@@ -1,9 +1,8 @@
 /**
- * CliSettingsService — File-based persistence for CLI runtime flags.
+ * SettingService — File-based persistence for runtime flags.
  *
- * Mirrors the webview's localStorage approach (useModelPromptSettings +
- * useToggleState) but uses a JSON file at ~/.khanhromvn-zen/cli-settings.json
- * because Node.js has no built-in localStorage.
+ * Shared between Zen and ZenCLI. Uses a JSON file at ~/.khanhromvn-zen/settings.json
+ * to ensure consistency across webview and CLI environments.
  *
  * All reads/writes are synchronous fs calls guarded by try/catch so that a
  * corrupt or missing file never crashes the app — it simply falls back to
@@ -14,19 +13,21 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
-const SETTINGS_FILE = path.join(os.homedir(), ".khanhromvn-zen", "cli-settings.json");
+const SETTINGS_FILE = path.join(
+  os.homedir(),
+  ".khanhromvn-zen",
+  "settings.json",
+);
 
-export interface CliSettings {
+export interface AppSettings {
   promptLength: "none" | "short" | "medium" | "long";
   codeStyle: "standard" | "functional" | "oop";
-  diagnosticsEnabled: boolean;
   skillsEnabled: boolean;
 }
 
-const DEFAULTS: CliSettings = {
+const DEFAULTS: AppSettings = {
   promptLength: "medium",
   codeStyle: "standard",
-  diagnosticsEnabled: false,
   skillsEnabled: true,
 };
 
@@ -34,17 +35,22 @@ const DEFAULTS: CliSettings = {
 const VALID_PROMPT_LENGTHS = ["none", "short", "medium", "long"] as const;
 const VALID_CODE_STYLES = ["standard", "functional", "oop"] as const;
 
-function isValidString<T extends string>(value: unknown, allowed: readonly T[]): value is T {
-  return typeof value === "string" && (allowed as readonly string[]).includes(value);
+function isValidString<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+): value is T {
+  return (
+    typeof value === "string" && (allowed as readonly string[]).includes(value)
+  );
 }
 
 /** Load persisted settings, merging with defaults for any missing/invalid fields. */
-export function loadCliSettings(): CliSettings {
+export function loadSettings(): AppSettings {
   try {
     if (!fs.existsSync(SETTINGS_FILE)) return { ...DEFAULTS };
 
     const raw = fs.readFileSync(SETTINGS_FILE, "utf-8");
-    const parsed = JSON.parse(raw) as Partial<CliSettings>;
+    const parsed = JSON.parse(raw) as Partial<AppSettings>;
 
     return {
       promptLength: isValidString(parsed.promptLength, VALID_PROMPT_LENGTHS)
@@ -53,10 +59,6 @@ export function loadCliSettings(): CliSettings {
       codeStyle: isValidString(parsed.codeStyle, VALID_CODE_STYLES)
         ? parsed.codeStyle
         : DEFAULTS.codeStyle,
-      diagnosticsEnabled:
-        typeof parsed.diagnosticsEnabled === "boolean"
-          ? parsed.diagnosticsEnabled
-          : DEFAULTS.diagnosticsEnabled,
       skillsEnabled:
         typeof parsed.skillsEnabled === "boolean"
           ? parsed.skillsEnabled
@@ -69,7 +71,7 @@ export function loadCliSettings(): CliSettings {
 }
 
 /** Persist current settings synchronously. Best-effort: failures are swallowed. */
-export function saveCliSettings(settings: CliSettings): void {
+export function saveSettings(settings: AppSettings): void {
   try {
     const dir = path.dirname(SETTINGS_FILE);
     if (!fs.existsSync(dir)) {

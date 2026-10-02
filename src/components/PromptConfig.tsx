@@ -8,11 +8,9 @@ interface PromptConfigProps {
   onClose: () => void;
   promptLength: PromptLength;
   codeStyle: CodeStyle;
-  diagnosticsEnabled: boolean;
   skillsEnabled: boolean;
   onSetPromptLength: (val: PromptLength) => void;
   onSetCodeStyle: (val: CodeStyle) => void;
-  onToggleDiagnostic: () => void;
   onToggleSkill: () => void;
 }
 
@@ -23,14 +21,12 @@ export function PromptConfig({
   onClose,
   promptLength,
   codeStyle,
-  diagnosticsEnabled,
   skillsEnabled,
   onSetPromptLength,
   onSetCodeStyle,
-  onToggleDiagnostic,
   onToggleSkill,
 }: PromptConfigProps): React.JSX.Element {
-  const [selectedIndex, setSelectedIndex] = useState(0); // 0-3 corresponding to the 4 rows
+  const [selectedIndex, setSelectedIndex] = useState(0); // 0-2 corresponding to the 3 rows
 
   useInput((input, key) => {
     if (key.escape) {
@@ -41,7 +37,7 @@ export function PromptConfig({
     if (key.upArrow) {
       setSelectedIndex(prev => Math.max(0, prev - 1));
     } else if (key.downArrow) {
-      setSelectedIndex(prev => Math.min(3, prev + 1));
+      setSelectedIndex(prev => Math.min(2, prev + 1));
     } else if (key.tab || key.leftArrow || key.rightArrow) {
       // Change value for the selected item
       if (selectedIndex === 0) {
@@ -55,9 +51,6 @@ export function PromptConfig({
         const nextIdx = (currentIdx + 1) % CODE_STYLES.length;
         onSetCodeStyle(CODE_STYLES[nextIdx]);
       } else if (selectedIndex === 2) {
-        // Diagnostic
-        onToggleDiagnostic();
-      } else if (selectedIndex === 3) {
         // Skill
         onToggleSkill();
       }
@@ -89,10 +82,8 @@ export function PromptConfig({
           </Text>, 0)}
         {renderRow("Style", 
           <Text bold color="magenta">[{codeStyle.toUpperCase()}]</Text>, 1)}
-        {renderRow("Diagnostic", 
-          <Text bold color={diagnosticsEnabled ? "green" : "red"}>[{diagnosticsEnabled ? "ON" : "OFF"}]</Text>, 2)}
         {renderRow("Skill", 
-          <Text bold color={skillsEnabled ? "cyan" : "gray"}>[{skillsEnabled ? "ON" : "OFF"}]</Text>, 3)}
+          <Text bold color={skillsEnabled ? "cyan" : "gray"}>[{skillsEnabled ? "ON" : "OFF"}]</Text>, 2)}
       </Box>
       <Box marginTop={1}>
         <Text dimColor>{"↑↓ navigate · Tab/←→ change value · Esc close"}</Text>

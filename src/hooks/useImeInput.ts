@@ -22,6 +22,8 @@ interface UseImeInputOptions {
   onTabPress?: () => void;
   /** Called when Ctrl+C is pressed. Receives the current input value. */
   onCtrlC?: (currentValue: string) => void;
+  /** Called when ESC is pressed. */
+  onEsc?: () => void;
 }
 
 interface UseImeInputResult {
@@ -37,6 +39,7 @@ export function useImeInput({
   onChange,
   onTabPress,
   onCtrlC,
+  onEsc,
 }: UseImeInputOptions): UseImeInputResult {
   const [value, setValue] = useState("");
   const [isComposing, setIsComposing] = useState(false);
@@ -75,12 +78,11 @@ export function useImeInput({
       return;
     }
 
-    // Escape clears
+    // Escape: trigger onEsc callback (for exit countdown), but do NOT clear input here
+    // The parent component decides whether to clear or start exit flow based on context
     if (key.escape) {
       clearTimer();
-      setValue("");
-      setIsComposing(false);
-      onChange?.("");
+      onEsc?.();
       return;
     }
 

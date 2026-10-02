@@ -1,6 +1,6 @@
 {
-  "name": "@khanhromvn/zen-cli",
-  "version": "1.0.1",
+  "name": "@khanhromvn/zencli",
+  "version": "1.0.7",
   "description": "AI-powered coding CLI tool — companion to the Zen VSCode extension (https://github.com/KhanhRomVN/Zen)",
   "keywords": [
     "cli",
@@ -24,7 +24,7 @@
   "author": "KhanhRomVN",
   "type": "module",
   "bin": {
-    "zen": "./dist/cli.js"
+    "zen-cli": "./dist/cli.js"
   },
   "main": "./dist/index.js",
   "files": [
@@ -55,6 +55,7 @@
     "axios": "^1.20.0",
     "fuse.js": "^7.5.0",
     "ink": "^7.1.1",
+    "ink-text-input": "^6.0.0",
     "lodash-es": "^4.18.1",
     "react": "^19.3.0",
     "strip-ansi": "^7.2.0",

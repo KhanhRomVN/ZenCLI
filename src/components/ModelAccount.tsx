@@ -129,8 +129,9 @@ export function ModelAccount({
 
     if (step === "account" && selectedProvider) {
       setLoading(true);
-      fetchAccounts(selectedProvider.provider_id)
-        .then((data) => {
+      fetchAccounts({ providerId: selectedProvider.provider_id })
+        .then((resp) => {
+          const data = resp.accounts || [];
           // Backend có thể không trả field is_enabled; coi là enabled nếu field vắng mặt hoặc truthy
           const isEnabled = (a: Account): boolean =>
             a.is_enabled === undefined ? true : Boolean(a.is_enabled);
@@ -180,7 +181,9 @@ export function ModelAccount({
 
     logToFile(`ModelAccount useInput: input=${JSON.stringify(input)}, escape=${key.escape}, return=${key.return}, step=${step}, cursorIndex=${cursorIndex}`);
 
-    if (key.escape) {
+    // Esc / Ctrl+C: cùng hành vi — quay lại step trước hoặc đóng panel
+    const isCancelKey = key.escape || (input === "c" && key.ctrl);
+    if (isCancelKey) {
       if (step === "account") {
         setStep("model");
         setCursorIndex(0);
@@ -319,10 +322,10 @@ export function ModelAccount({
 
   const footerText =
     step === "provider"
-      ? "Enter to set as default · Esc to cancel"
+      ? "Enter to set as default · Esc or Ctrl+C to cancel"
       : step === "model"
-        ? "Enter to set as default · Esc to return provider"
-        : "Enter to set as default · Esc to return model";
+        ? "Enter to set as default · Esc or Ctrl+C to return provider"
+        : "Enter to set as default · Esc or Ctrl+C to return model";
 
   return (
     <Box flexDirection="column">

@@ -3,20 +3,10 @@
  * Removes React/webview dependencies; uses plain Node.js interfaces.
  */
 
-export interface Diagnostic {
-  severity: string;
-  message: string;
-  line: number;
-  column: number;
-  source?: string;
-  code?: string | number;
-}
-
 export interface ToolOutput {
   output: string;
   isError: boolean;
   terminalId?: string;
-  diagnostics?: Diagnostic[];
   version?: number;
 }
 
@@ -49,6 +39,5 @@ export interface ToolExecutor {
 }
 
 export interface ExecutorOptions {
-  skipDiagnostics?: boolean;
   bypassIgnore?: boolean;
 }

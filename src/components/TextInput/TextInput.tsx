@@ -179,6 +179,28 @@ export function TextInput({
         }
       }
     },
+    onEsc: () => {
+      // ESC behavior:
+      // 1. If there is text in input -> Clear it (same as Ctrl+C with text)
+      // 2. If input is empty -> Start/Continue exit countdown (same as Ctrl+C on empty)
+      if (value.length > 0) {
+        clearValue();
+        // Cancel any ongoing exit countdown if present
+        if (countdownIntervalRef.current) {
+          clearInterval(countdownIntervalRef.current);
+          setExitCountdown(null);
+        }
+      } else {
+        // Empty input
+        if (exitCountdown !== null) {
+          // Already counting down -> Exit immediately on second press
+          performExit();
+        } else {
+          // Not counting down -> Start countdown
+          startExitCountdown();
+        }
+      }
+    },
   });
 
   // Display value as-is — "?" and "/" are only stripped when they are the sole character (toggle triggers)

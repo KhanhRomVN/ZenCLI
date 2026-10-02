@@ -1,13 +1,14 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { Box, Text, useStdout } from "ink";
-import { Chat } from "./components/Chat/Chat";
-import { TextInput } from "./components/TextInput/index";
+import { Chat } from "./components/Chat";
+import { WelcomeSection } from "./components/WelcomeSection";
+import { TextInput } from "./components/TextInput/TextInput";
 import { ShortcutsHelp } from "./components/TextInput/ShortcutsHelp";
 import { CommandList } from "./components/TextInput/CommandList";
 import { useBackendHealth } from "./hooks/useBackendHealth";
 import type { RuntimeFlags } from "./services/ChatService";
 import type { SystemPromptMode, PromptLengthMode } from "./prompts";
-import { loadCliSettings, saveCliSettings } from "./services/CliSettingsService";
+import { loadSettings, saveSettings } from "./services/SettingService";
 
 /**
  * Root application component — manages top-level layout.
@@ -20,10 +21,9 @@ import { loadCliSettings, saveCliSettings } from "./services/CliSettingsService"
  * └─────────────────────────────┘
  *
  * All slash commands (/model-account, /history, /settings, etc.) are now
- * handled inline within Chat via CommandPanel wrapper.
  */
-type PromptLength = 'none' | 'short' | 'medium' | 'long';
-type CodeStyle = 'standard' | 'functional' | 'oop';
+type PromptLength = "none" | "short" | "medium" | "long";
+type CodeStyle = "standard" | "functional" | "oop";
 
 /** Map UI codeStyle (ZenCLI-specific) onto the shared SystemPromptMode axis. */
 const CODE_STYLE_TO_SYSTEM_PROMPT_MODE: Record<CodeStyle, SystemPromptMode> = {
@@ -42,43 +42,61 @@ interface ModelInfo {
 /**
  * Horizontal rule that spans the full terminal width.
  */
-function HorizontalRule({ thinkingEnabled }: { thinkingEnabled?: boolean }): React.JSX.Element {
+function HorizontalRule({
+  thinkingEnabled,
+}: {
+  thinkingEnabled?: boolean;
+}): React.JSX.Element {
   const { stdout } = useStdout();
   const width = stdout?.columns ?? 80;
   const color = thinkingEnabled ? "magenta" : undefined;
   const dim = !thinkingEnabled;
-  return <Text color={color} dimColor={dim}>{"─".repeat(width)}</Text>;
+  return (
+    <Text color={color} dimColor={dim}>
+      {"─".repeat(width)}
+    </Text>
+  );
 }
 
 export function App(): React.JSX.Element {
+  const workspacePath = process.cwd();
   const [shortcutsVisible, setShortcutsVisible] = useState(false);
   const [commandsVisible, setCommandsVisible] = useState(false);
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [appExitCountdown, setAppExitCountdown] = useState<number | null>(null);
   const [modelInfo, setModelInfo] = useState<ModelInfo>({
     hasModelAndAccount: false,
-    providerName: '-',
-    modelName: '-',
-    email: '-',
+    providerName: "-",
+    modelName: "-",
+    email: "-",
   });
-  const [contextUsage, setContextUsage] = useState<{ prompt: number; completion: number; total: number }>({ prompt: 0, completion: 0, total: 0 });
+  const [contextUsage, setContextUsage] = useState<{
+    prompt: number;
+    completion: number;
+    total: number;
+  }>({ prompt: 0, completion: 0, total: 0 });
   const [inlinePanelOpen, setInlinePanelOpen] = useState(false);
-  
+
   // Runtime Config States
-  const initialSettings = useMemo(() => loadCliSettings(), []);
-  const [promptLength, setPromptLength] = useState<PromptLength>(initialSettings.promptLength);
-  const [codeStyle, setCodeStyle] = useState<CodeStyle>(initialSettings.codeStyle);
-  const [diagnosticsEnabled, setDiagnosticsEnabled] = useState<boolean>(initialSettings.diagnosticsEnabled);
-  const [skillsEnabled, setSkillsEnabled] = useState<boolean>(initialSettings.skillsEnabled);
+  const initialSettings = useMemo(() => loadSettings(), []);
+  const [promptLength, setPromptLength] = useState<PromptLength>(
+    initialSettings.promptLength,
+  );
+  const [codeStyle, setCodeStyle] = useState<CodeStyle>(
+    initialSettings.codeStyle,
+  );
+  const [skillsEnabled, setSkillsEnabled] = useState<boolean>(
+    initialSettings.skillsEnabled,
+  );
 
   useEffect(() => {
-    saveCliSettings({ promptLength, codeStyle, diagnosticsEnabled, skillsEnabled });
-  }, [promptLength, codeStyle, diagnosticsEnabled, skillsEnabled]);
+    saveSettings({ promptLength, codeStyle, skillsEnabled });
+  }, [promptLength, codeStyle, skillsEnabled]);
 
   const { isConnected } = useBackendHealth();
 
   const toggleThinking = useCallback(() => {
-    setThinkingEnabled(prev => !prev);
+    setThinkingEnabled((prev) => !prev);
   }, []);
 
   // Callback ref to access Chat's handlers from App level
@@ -99,9 +117,8 @@ export function App(): React.JSX.Element {
       if (trimmed.length === 0) return;
 
       console.log("[DEBUG APP] Submitting:", trimmed);
-      
+
       // Forward ALL inputs (including slash commands) to Chat
-      // Chat will intercept known commands and render them inline via CommandPanel
       setCommandsVisible(false);
       setShortcutsVisible(false);
       chatHandlers?.handleSubmit(trimmed);
@@ -114,15 +131,20 @@ export function App(): React.JSX.Element {
     return {
       promptLengthMode: promptLength as PromptLengthMode,
       systemPromptMode: CODE_STYLE_TO_SYSTEM_PROMPT_MODE[codeStyle],
-      diagnosticEnabled: diagnosticsEnabled,
       skillsEnabled: skillsEnabled,
     };
-  }, [promptLength, codeStyle, diagnosticsEnabled, skillsEnabled]);
+  }, [promptLength, codeStyle, skillsEnabled]);
 
   return (
     <Box flexDirection="column" width="100%" height="100%">
       {/* Chat Area (Scrollable/Growable) */}
       <Box flexGrow={1} flexDirection="column" minHeight={0}>
+        <WelcomeSection
+          providerName={modelInfo.providerName}
+          modelName={modelInfo.modelName}
+          email={modelInfo.email}
+          workspacePath={workspacePath}
+        />
         <Chat
           isActive={true}
           onHandlersReady={setChatHandlers}
@@ -132,12 +154,10 @@ export function App(): React.JSX.Element {
           getRuntimeFlags={getRuntimeFlags}
           promptLength={promptLength}
           codeStyle={codeStyle}
-          diagnosticsEnabled={diagnosticsEnabled}
           skillsEnabled={skillsEnabled}
           onSetPromptLength={setPromptLength}
           onSetCodeStyle={setCodeStyle}
-          onToggleDiagnostic={() => setDiagnosticsEnabled(prev => !prev)}
-          onToggleSkill={() => setSkillsEnabled(prev => !prev)}
+          onToggleSkill={() => setSkillsEnabled((prev) => !prev)}
         />
       </Box>
 
@@ -147,27 +167,34 @@ export function App(): React.JSX.Element {
         <Box flexDirection="column">
           {/* Spacer */}
           <Box height={1} />
-          
+
           {/* Status Bar Above Input */}
           <Box justifyContent="space-between" paddingX={1}>
             <Text dimColor>
               {modelInfo.providerName}/{modelInfo.modelName} {modelInfo.email}
             </Text>
             <Box gap={1}>
-              {promptLength !== 'none' && (
+              {promptLength !== "none" && (
                 <>
-                  <Text color={diagnosticsEnabled ? "green" : "red"} bold>DIAG:{diagnosticsEnabled ? "ON" : "OFF"}</Text>
-                  <Text color={skillsEnabled ? "cyan" : "gray"} bold>SKILL:{skillsEnabled ? "ON" : "OFF"}</Text>
+                  <Text color={skillsEnabled ? "cyan" : "gray"} bold>
+                    SKILL:{skillsEnabled ? "ON" : "OFF"}
+                  </Text>
                   <Text dimColor>style:</Text>
-                  <Text color="magenta" bold>[{codeStyle.toUpperCase()}]</Text>
+                  <Text color="magenta" bold>
+                    [{codeStyle.toUpperCase()}]
+                  </Text>
                 </>
               )}
               <Text dimColor>length:</Text>
               <Text
                 color={
-                  promptLength === 'none'   ? 'gray'   :
-                  promptLength === 'short'  ? 'blue'   :
-                  promptLength === 'medium' ? 'green'  : 'yellow'
+                  promptLength === "none"
+                    ? "gray"
+                    : promptLength === "short"
+                      ? "blue"
+                      : promptLength === "medium"
+                        ? "green"
+                        : "yellow"
                 }
                 bold
               >
@@ -175,9 +202,9 @@ export function App(): React.JSX.Element {
               </Text>
             </Box>
           </Box>
-          
+
           <HorizontalRule thinkingEnabled={thinkingEnabled} />
-          
+
           {/* Input Area */}
           <Box paddingX={1}>
             <TextInput
@@ -195,13 +222,13 @@ export function App(): React.JSX.Element {
           {/* Footer Status Bar */}
           {!shortcutsVisible && !commandsVisible && (
             <Box justifyContent="space-between" paddingX={1}>
-              <Text 
-                dimColor={appExitCountdown === null} 
+              <Text
+                dimColor={appExitCountdown === null}
                 color={appExitCountdown !== null ? "yellow" : undefined}
               >
                 {appExitCountdown !== null
-                  ? `press ctrl+c again in ${appExitCountdown}s to exit`
-                  : "? for shortcuts · / for commands"}
+                  ? `press esc again in ${appExitCountdown}s to exit`
+                  : `? for shortcuts · / for commands${thinkingEnabled ? " · TAB for thinking" : ""}`}
               </Text>
               <Box>
                 <Text bold color={thinkingEnabled ? "magenta" : "gray"}>
@@ -211,8 +238,8 @@ export function App(): React.JSX.Element {
                 <Text dimColor>
                   {contextUsage.total >= 1000
                     ? (contextUsage.total / 1000).toFixed(1) + "K"
-                    : contextUsage.total.toString()}
-                  {" "}tokens
+                    : contextUsage.total.toString()}{" "}
+                  tokens
                 </Text>
               </Box>
             </Box>

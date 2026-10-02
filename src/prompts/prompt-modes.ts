@@ -13,8 +13,6 @@ export interface PromptModeConfig {
   language: string;
   systemInfo: SystemInfo;
   promptLengthMode?: PromptLengthMode;
-  /** Khi false, thêm constraint LSP-DIAGNOSTICS-FALLBACK vào system prompt */
-  diagnosticEnabled?: boolean;
 }
 
 /**
@@ -37,7 +35,6 @@ export function buildPromptForMode(
     language,
     systemInfo,
     promptLengthMode = "long",
-    diagnosticEnabled = true,
   } = config;
 
   // None — không gửi system prompt nào cả
@@ -66,7 +63,7 @@ export function buildPromptForMode(
       TOOLS_REFERENCE,
       buildIdentityPrompt(language, mode),
       buildWorkflow(mode),
-      buildConstraints(mode, language, diagnosticEnabled),
+      buildConstraints(mode, language),
       buildSystemContext(systemInfo, mode),
     ];
     return sections.join("\n\n---\n\n");

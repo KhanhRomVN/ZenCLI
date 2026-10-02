@@ -27,14 +27,17 @@ import { combinePromptsForMode } from "../prompts";
 import type { SystemPromptMode, PromptLengthMode } from "../prompts";
 import type { SystemInfo } from "../prompts/system-context";
 import { buildSkillsSection } from "./SkillService";
+import { logToFile } from "./api";
+import * as fs from "fs";
+import * as path from "path";
+import { PathService } from "./PathService";
 
-// ─── Types ──────────────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────
 
 /** Runtime flags điều khiển system prompt — được cập nhật realtime từ UI */
 export interface RuntimeFlags {
   promptLengthMode: PromptLengthMode;
   systemPromptMode: SystemPromptMode;
-  diagnosticEnabled: boolean;
   skillsEnabled: boolean;
 }
 
@@ -108,7 +111,6 @@ function buildSystemPromptForFlags(
       language: config.aiLanguage,
       systemInfo,
       promptLengthMode: flags.promptLengthMode,
-      diagnosticEnabled: flags.diagnosticEnabled,
     },
     flags.systemPromptMode,
   );
@@ -167,6 +169,10 @@ export class ChatService extends EventEmitter {
   private _isProcessing = false;
   private _isStreaming = false;
   private _isContinuing = false;
+  
+  /** Identifies the runtime environment where this session originated. 
+   *  Used for metadata tagging in shared storage with Zen VSCode Extension. */
+  private _sourceEnvironment: "terminal" | "vscode-extension" = "terminal";
 
   constructor(config: ChatServiceConfig) {
     super();
@@ -181,6 +187,10 @@ export class ChatService extends EventEmitter {
 
   getCurrentConversationId(): string {
     return this.currentConversationId;
+  }
+
+  getSourceEnvironment(): "terminal" | "vscode-extension" {
+    return this._sourceEnvironment;
   }
 
   getBackendConversationId(): string {
@@ -344,6 +354,10 @@ export class ChatService extends EventEmitter {
       this.backendConversationId = "";
       if (model) this.lastUsedModel = model;
       if (account) this.lastUsedAccount = account;
+      
+      // [DEBUG] Log khi tạo conversation mới
+      logToFile(`[CHAT_SERVICE] New Conversation Created: ID=${effectiveChatUuid}`);
+      
       this.emit("conversationIdChanged", effectiveChatUuid);
     }
 
@@ -453,6 +467,10 @@ export class ChatService extends EventEmitter {
 
     this.messages = updatedMessages;
     this.emit("messagesUpdated", updatedMessages);
+    
+    // [PERSIST] Save conversation state immediately after adding user message
+    await this.persistConversation();
+    
     this.setProcessing(true);
 
     try {
@@ -647,11 +665,17 @@ export class ChatService extends EventEmitter {
           this.emit("toolRequest", executableActions, assistantMessage);
         }
       }
+      
+      // [PERSIST] Save conversation after successful response processing
+      await this.persistConversation();
+      
     } catch (error) {
       this.setStreaming(false);
       this.abortController = null;
 
       if (error instanceof Error && error.name === "AbortError") {
+        // Even on abort, save what we have so far
+        await this.persistConversation();
         this.setProcessing(false);
         return;
       }
@@ -669,6 +693,10 @@ export class ChatService extends EventEmitter {
         errorMessage,
       ];
       this.emit("messagesUpdated", this.messages);
+      
+      // [PERSIST] Save conversation including error state
+      await this.persistConversation();
+      
       this.setProcessing(false);
       this.emit(
         "error",
@@ -743,6 +771,144 @@ export class ChatService extends EventEmitter {
           uiHidden: true,
         });
       }, 100);
+    }
+  }
+
+  /**
+   * Persist current conversation state to filesystem.
+   * Called after significant updates to ensure history is saved even if app crashes.
+   */
+  private async persistConversation(): Promise<void> {
+    if (!this.currentConversationId || this.messages.length === 0) return;
+
+    try {
+      const pathService = PathService.getInstance();
+      const cwd = process.cwd();
+      const filePath = pathService.getConversationJsonPath(cwd, this.currentConversationId);
+      
+      // Ensure directory exists
+      const dir = path.dirname(filePath);
+      await fs.promises.mkdir(dir, { recursive: true });
+
+      const now = Date.now();
+      
+      // Construct full data object compatible with History.tsx reader
+      const data = {
+        metadata: {
+          id: this.currentConversationId,
+          title: "Untitled", // TODO: Extract title from first user message if needed
+          createdAt: now,
+          lastModified: now,
+          totalTokenUsage: 0, // TODO: Aggregate tokens from messages if tracked
+          sourceEnvironment: this._sourceEnvironment,
+        },
+        messages: this.messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+          providerId: (m as any).providerId,
+          modelId: (m as any).modelId,
+        })),
+      };
+
+      await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
+      logToFile(`[STORAGE] Saved conversation ${this.currentConversationId} to ${filePath}`);
+    } catch (error: any) {
+      logToFile(`[STORAGE_ERROR] Failed to save conversation ${this.currentConversationId}: ${error.message}`);
+      console.error("Failed to save conversation:", error);
+    }
+  }
+
+  /**
+   * Đọc toàn bộ conversation từ file JSON và khôi phục messages + conversationId.
+   * Tương thích với format lưu bởi Zen VSCode Extension (cùng nơi lưu history).
+   */
+  async loadConversation(conversationId: string): Promise<boolean> {
+    try {
+      const pathService = PathService.getInstance();
+      const cwd = process.cwd();
+      const filePath = pathService.getConversationJsonPath(cwd, conversationId);
+
+      if (!fs.existsSync(filePath)) {
+        logToFile(`[LOAD_CONV] File not found: ${filePath}`);
+        return false;
+      }
+
+      const content = await fs.promises.readFile(filePath, "utf-8");
+      const parsed = JSON.parse(content);
+      
+      // Hỗ trợ cả 2 format: Mảng message thuần túy HOẶC Object { metadata, messages }
+      const rawMessages: any[] = Array.isArray(parsed) 
+        ? parsed 
+        : (parsed.messages || []);
+
+      if (!Array.isArray(rawMessages)) {
+        logToFile(`[LOAD_CONV] Invalid format: 'messages' is not an array in ${conversationId}`);
+        return false;
+      }
+
+      // Validate và Map sang Message[]
+      const restoredMessages: Message[] = rawMessages
+        .filter((m) => m && typeof m === "object" && m.role && m.content !== undefined)
+        .map((m, i) => {
+          // Sinh ID duy nhất nếu thiếu, dùng timestamp cơ sở + index để đảm bảo unique
+          const baseTs = Date.now();
+          return {
+            ...m,
+            id: m.id || `conv-${baseTs}-${i}`,
+            // Đảm bảo content là string
+            content: String(m.content || ""),
+            // Giữ nguyên timestamp nếu có, nếu không thì dùng hiện tại
+            timestamp: m.timestamp || baseTs,
+          };
+        });
+
+      logToFile(`[LOAD_CONV] Parsed ${rawMessages.length} raw msgs, kept ${restoredMessages.length} valid msgs for ${conversationId}`);
+
+      // Khôi phục metadata model/account từ assistant message cuối có đủ info
+      const lastAssistantWithMeta = [...restoredMessages]
+        .reverse()
+        .find(
+          (m) => m.role === "assistant" && m.providerId && m.modelId,
+        );
+      if (lastAssistantWithMeta?.providerId && lastAssistantWithMeta?.modelId) {
+        this.lastUsedModel = {
+          id: lastAssistantWithMeta.modelId,
+          providerId: lastAssistantWithMeta.providerId,
+        };
+      }
+      if (lastAssistantWithMeta?.accountId) {
+        this.lastUsedAccount = { id: lastAssistantWithMeta.accountId };
+      }
+
+      // Backend conversation id (nếu có trong metadata hoặc message cuối)
+      const backendIdFromMsg = [...restoredMessages]
+        .reverse()
+        .find((m) => m.conversationId)?.conversationId;
+      this.backendConversationId =
+        backendIdFromMsg ||
+        (!Array.isArray(parsed) && parsed.backendConversationId) ||
+        "";
+
+      this.currentConversationId = conversationId;
+      this.messages = restoredMessages;
+      this.userRequestCount = restoredMessages.filter(
+        (m) => m.role === "user",
+      ).length;
+
+      this.emit("messagesUpdated", restoredMessages);
+      this.emit("conversationIdChanged", conversationId);
+
+      logToFile(
+        `[LOAD_CONV] Restored ${restoredMessages.length} messages for ${conversationId}`,
+      );
+      return true;
+    } catch (error: any) {
+      logToFile(
+        `[LOAD_CONV_ERROR] Failed to load ${conversationId}: ${error.message}`,
+      );
+      console.error("Failed to load conversation:", error);
+      return false;
     }
   }
 

@@ -4,25 +4,27 @@ import { Box, Text, useInput } from 'ink'
 interface CommandEntry {
   command: string
   description: string
-  type?: 'static' | 'open-prompt-config'
 }
 
 // Base commands that don't change based on state
 const STATIC_COMMANDS: CommandEntry[] = [
-  { command: '/model-account', description: 'Select provider, model and account', type: 'static' },
-  { command: '/prompt-config', description: 'Configure prompt length, style, diagnostic & skill', type: 'open-prompt-config' },
-  { command: '/analytic', description: 'Show session usage statistics', type: 'static' },
-  { command: '/new', description: 'Start a new conversation', type: 'static' },
-  { command: '/history', description: 'View conversation list', type: 'static' },
-  { command: '/setting', description: 'Open settings', type: 'static' },
-  { command: '/account', description: 'Manage account', type: 'static' },
-  { command: '/exit', description: 'Exit application', type: 'static' },
+  { command: '/model-account', description: 'Select provider, model and account' },
+  { command: '/prompt-config', description: 'Configure prompt length, style & skill' },
+  { command: '/analytic', description: 'Show session usage statistics' },
+  { command: '/new', description: 'Start a new conversation' },
+  { command: '/history', description: 'View conversation list' },
+  { command: '/setting', description: 'Open settings' },
+  { command: '/account', description: 'Manage account' },
+  { command: '/add-account', description: 'Add a new account' },
+  { command: '/skill', description: 'Manage installed skills' },
+  { command: '/add-skill', description: 'Install a new skill from marketplace' },
+  { command: '/import-account', description: 'Import accounts from JSON/YAML file' },
+  { command: '/exit', description: 'Exit application' },
 ]
 
 interface CommandListProps {
   onSelect?: (command: string) => void
   onClose?: () => void
-  onOpenPromptConfig?: () => void
 }
 
 /**
@@ -32,7 +34,6 @@ interface CommandListProps {
 export function CommandList({
   onSelect,
   onClose,
-  onOpenPromptConfig,
 }: CommandListProps): React.JSX.Element {
   const [cursorIndex, setCursorIndex] = useState(0)
 
@@ -45,17 +46,13 @@ export function CommandList({
     }
     
     if (key.upArrow) {
-      setCursorIndex(prev => Math.max(0, prev - 1))
+      setCursorIndex(prev => (prev <= 0 ? commands.length - 1 : prev - 1))
     } else if (key.downArrow) {
-      setCursorIndex(prev => Math.min(commands.length - 1, prev + 1))
+      setCursorIndex(prev => (prev >= commands.length - 1 ? 0 : prev + 1))
     } else if (key.return) {
       const selectedCmd = commands[cursorIndex]
-      
-      if (selectedCmd.type === 'open-prompt-config') {
-        onOpenPromptConfig?.()
-      } else {
-        onSelect?.(selectedCmd.command)
-      }
+      // Unified flow: Always send command string via onSelect
+      onSelect?.(selectedCmd.command)
     }
   })
 
