@@ -2,18 +2,17 @@
  * ------------------------------------------------------------------
  * Security Validator
  * ------------------------------------------------------------------
- * Kiểm tra bảo mật tĩnh: chặn truy cập file nhạy cảm (.env, .pem,
- * credentials...), thư mục hệ thống, và lệnh nguy hiểm (rm -rf,
- * sudo, curl | sh...).
+ * Lớp kiểm soát an ninh tĩnh (Static Analysis) trước khi thực thi bất kỳ thao tác nào.
+ * Ngăn chặn rò rỉ thông tin bí mật (Secrets Leakage) và phá hủy hệ thống (System Destruction).
  *
  * Main functions:
- * - validatePath()    : Kiểm tra đường dẫn file có an toàn không
- * - validateCommand() : Kiểm tra lệnh shell có chứa pattern nguy hiểm không
+ * - validatePath()    : Chặn đọc/ghi file cấu hình nhạy cảm (.env, key SSH...) và thư mục OS
+ * - validateCommand() : Phát hiện và chặn các chuỗi lệnh độc hại (RM-RF, Pipe-to-Shell, Fork Bomb)
  * ------------------------------------------------------------------
  */
 
 // ─── Imports ────────────────────────────────────────────────────────────
-// ── Node ──
+// ── Node ─
 import * as path from "path";
 
 // ─── Interfaces ─────────────────────────────────────────────────────────

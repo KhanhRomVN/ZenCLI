@@ -1,28 +1,28 @@
-import { buildPromptForMode } from "./prompt-modes";
-import type { SystemPromptMode, PromptModeConfig } from "./prompt-modes";
+import { buildPromptForMode } from "./prompt-modes.js";
+import type { SystemPromptMode, PromptModeConfig } from "./prompt-modes.js";
 
-export { buildIdentityPrompt } from "./identity";
-export { buildWorkflow } from "./workflow";
-export { TOOLS_REFERENCE } from "./tools-reference";
-export { buildSystemContext } from "./system-context";
-export type { SystemInfo } from "./system-context";
-export { buildConstraints } from "./constraints";
-export { TOOL_VALIDATION } from "./tool-validation";
+export { buildIdentityPrompt } from "./identity.js";
+export { buildWorkflow } from "./workflow.js";
+export { TOOLS_REFERENCE } from "./tools-reference.js";
+export { buildSystemContext } from "./system-context.js";
+export type { SystemInfo } from "./system-context.js";
+export { buildConstraints } from "./constraints.js";
+export { TOOL_VALIDATION } from "./tool-validation.js";
 // EXAMPLE used to be a plain constant; it is now mode-aware (see example.ts)
 // so it is exported as a builder function instead.
-export { buildExample } from "./example";
-export { buildPromptForMode } from "./prompt-modes";
+export { buildExample } from "./example.js";
+export { buildPromptForMode } from "./prompt-modes.js";
 export type {
   SystemPromptMode,
   PromptModeConfig,
   PromptLengthMode,
-} from "./prompt-modes";
-export { MODE_BEHAVIORS } from "./mode-config";
-export type { ModeBehaviorConfig } from "./mode-config";
+} from "./prompt-modes.js";
+export { MODE_BEHAVIORS } from "./mode-config.js";
+export type { ModeBehaviorConfig } from "./mode-config.js";
 
 interface PromptConfig {
   language: string;
-  systemInfo: import("./system-context").SystemInfo;
+  systemInfo: import("./system-context.js").SystemInfo;
 }
 
 /**

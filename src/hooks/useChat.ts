@@ -1,18 +1,32 @@
 /**
- * useChat — Thin React hook wrapper around ChatService.
- * Bridges ChatService events to React state for Ink components.
+ * ------------------------------------------------------------------
+ * useChat Hook
+ * ------------------------------------------------------------------
+ * Cầu nối mỏng (Thin Wrapper) giữa lớp Business Logic (ChatService) và Giao diện React (Ink).
+ * Chịu trách nhiệm đồng bộ hóa trạng thái sự kiện (Event-driven) sang State của React.
  *
- * This hook is intentionally minimal: all business logic lives in ChatService.
- * The hook only manages React state synchronization and lifecycle.
+ * Main features:
+ * - Khởi tạo singleton ChatService & ToolExecutionService ổn định suốt vòng đời component
+ * - Lắng nghe các sự kiện cập nhật tin nhắn, trạng thái streaming/processing từ Service
+ * - Cung cấp API thuần túy để Component cha điều khiển luồng chat (send, stop, reset)
+ * - Tự động gắn kết vòng lặp thực thi Tool tự động (Auto-tool loop) khi cần thiết
+ * ------------------------------------------------------------------
  */
 
+// ─── Imports ───────────────────────────────────────────────────────────
+// ── React ──
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { ChatService } from "../services/ChatService";
-import type { RuntimeFlags } from "../services/ChatService";
-import { ToolExecutionService } from "../services/ToolExecutionService";
-import type { Message } from "../types/message";
-import type { SendMessageOptions } from "../services/ChatService";
 
+// ── Services ──
+import { ChatService } from "../services/ChatService.js";
+import type { RuntimeFlags } from "../services/ChatService.js";
+import { ToolExecutionService } from "../services/ToolExecutionService.js";
+
+// ── Types ──
+import type { Message } from "../types/message.js";
+import type { SendMessageOptions } from "../services/ChatService.js";
+
+// ─── Interfaces ────────────────────────────────────────────────────────
 export interface UseChatConfig {
   apiUrl: string;
   workspacePath: string;
@@ -39,7 +53,9 @@ export interface UseChatReturn {
   chatService: ChatService;
 }
 
+// ─── Hook ───────────────────────────────────────────────────────────────
 export function useChat(config: UseChatConfig): UseChatReturn {
+  // ── Refs ──
   // Keep latest getRuntimeFlags in a ref so the stable ChatService instance
   // always reads current values without needing re-instantiation.
   const getRuntimeFlagsRef = useRef(config.getRuntimeFlags);
@@ -74,6 +90,7 @@ export function useChat(config: UseChatConfig): UseChatReturn {
   }
   const toolExecutionService = toolExecRef.current;
 
+  // ── State ──
   // React state mirrors
   const [messages, setMessagesState] = useState<Message[]>([]);
   const [isProcessing, setIsProcessingState] = useState(false);
@@ -81,6 +98,7 @@ export function useChat(config: UseChatConfig): UseChatReturn {
   const [isContinuing, setIsContinuingState] = useState(false);
   const [currentConversationId, setCurrentConversationIdState] = useState("");
 
+  // ── Effects ─
   // Attach/detach the toolRequest listener on mount/unmount.
   useEffect(() => {
     const detach = toolExecutionService.attach(chatService);
@@ -101,8 +119,19 @@ export function useChat(config: UseChatConfig): UseChatReturn {
     const onProcessingChanged = (val: boolean) => setIsProcessingState(val);
     const onStreamingChanged = (val: boolean) => setIsStreamingState(val);
     const onContinuingChanged = (val: boolean) => setIsContinuingState(val);
-    const onConversationIdChanged = (id: string) =>
+    const onConversationIdChanged = (id: string) => {
       setCurrentConversationIdState(id);
+      
+      // ── NEW: Emit bind signal to stderr for Phantoma integration ──
+      // Format: [PHANTOMA_BIND] id=<uuid>
+      // Phantoma parses this from PTY output to auto-bind conversation ID to terminal panel.
+      if (id) {
+        process.stderr.write(`\x1b[0m[PHANTOMA_BIND] id=${id}\n`);
+      } else {
+        // When session resets, notify Phantoma to clear binding
+        process.stderr.write(`\x1b[0m[PHANTOMA_UNBIND]\n`);
+      }
+    };
 
     chatService.on("messagesUpdated", onMessagesUpdated);
     chatService.on("processingChanged", onProcessingChanged);
@@ -135,6 +164,7 @@ export function useChat(config: UseChatConfig): UseChatReturn {
     chatService,
   ]);
 
+  // ── Callbacks ──
   // Wrapped methods
   const setMessages = useCallback(
     (msgs: Message[]) => {

@@ -13,17 +13,9 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
-// ─── File Logger ──────────────────────────────────────────────────────────────
-const LOG_FILE = path.join(process.cwd(), "log.log");
-
-export function logToFile(message: string): void {
-  try {
-    const timestamp = new Date().toISOString();
-    fs.appendFileSync(LOG_FILE, `[${timestamp}] ${message}\n`, "utf-8");
-  } catch {
-    // Silently ignore logging errors to avoid disrupting the app
-  }
-}
+// ─── Import & Re-export from dedicated logger module ──────────────────────────
+import { logToFile } from "./logger.js";
+export { logToFile };
 
 // ─── Types ──────────────────────────────────────────────────────────────
 

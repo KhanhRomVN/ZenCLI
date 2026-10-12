@@ -1,16 +1,40 @@
+/**
+ * ------------------------------------------------------------------
+ * Skill Manager
+ * ------------------------------------------------------------------
+ * Giao diện quản lý các Skill đã cài đặt. Cho phép xem danh sách,
+ * lọc theo tên/slug và xóa skill khỏi hệ thống.
+ *
+ * Main features:
+ * - Liệt kê tất cả skill đã cài đặt từ local storage
+ * - Tìm kiếm/lọc skill theo keyword
+ * - Xóa skill với xác nhận trước khi thực hiện
+ * - Hiển thị thông báo thành công/thất bại tạm thời
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ───────────────────────────────────────────────────────────
+// ── React ──
 import React, { useState, useEffect } from "react";
+
+// ── UI ──
 import { Box, Text, useInput } from "ink";
+
+// ── Services ──
 import {
   listInstalledSkills,
   uninstallSkill,
   type InstalledSkill,
 } from "../services/SkillService.js";
 
+// ─── Interfaces ───────────────────────────────────────────────────────
 interface SkillProps {
   onClose: () => void;
 }
 
+// ─── Component ─────────────────────────────────────────────────────────
 export function Skill({ onClose }: SkillProps): React.JSX.Element {
+  // ── State ──
   const [skills, setSkills] = useState<InstalledSkill[]>([]);
   const [filter, setFilter] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -22,18 +46,29 @@ export function Skill({ onClose }: SkillProps): React.JSX.Element {
     type: "success" | "error";
   } | null>(null);
 
-  // Load skills on mount and when filter changes (though filtering is client-side here)
-  useEffect(() => {
-    const loaded = listInstalledSkills();
-    setSkills(loaded);
-  }, []);
-
+  // ── Derived ──
   const filteredSkills = skills.filter(
     (s) =>
       s.name.toLowerCase().includes(filter.toLowerCase()) ||
       s.slug.toLowerCase().includes(filter.toLowerCase()),
   );
 
+  // ── Effects ──
+  // Load skills on mount
+  useEffect(() => {
+    const loaded = listInstalledSkills();
+    setSkills(loaded);
+  }, []);
+
+  // Clear message after timeout
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
+  // ── Handlers ──
   useInput((input, key) => {
     if (key.escape) {
       if (confirmDeleteSlug) {
@@ -86,14 +121,7 @@ export function Skill({ onClose }: SkillProps): React.JSX.Element {
     }
   });
 
-  // Clear message after timeout
-  useEffect(() => {
-    if (message) {
-      const timer = setTimeout(() => setMessage(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [message]);
-
+  // ── Render ──
   return (
     <Box flexDirection="column" paddingX={1}>
       <Text bold color="yellow">

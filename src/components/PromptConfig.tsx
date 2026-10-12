@@ -1,6 +1,26 @@
+/**
+ * ------------------------------------------------------------------
+ * PromptConfig
+ * ------------------------------------------------------------------
+ * Giao diện cấu hình tham số prompt cho AI, bao gồm độ dài prompt,
+ * phong cách code và bật/tắt tính năng Skill.
+ *
+ * Main features:
+ * - Chọn độ dài prompt (none, short, medium, long)
+ * - Chọn phong cách code (standard, functional, oop)
+ * - Bật/tắt chế độ Skill
+ * - Điều hướng bằng phím mũi tên và thay đổi giá trị bằng Tab/Mũi tên ngang
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ───────────────────────────────────────────────────────────
+// ── React ──
 import React, { useState } from 'react'
+
+// ── UI ──
 import { Box, Text, useInput } from 'ink'
 
+// ─── Types ──────────────────────────────────────────────────────────────
 type PromptLength = 'none' | 'short' | 'medium' | 'long';
 type CodeStyle = 'standard' | 'functional' | 'oop';
 
@@ -14,9 +34,11 @@ interface PromptConfigProps {
   onToggleSkill: () => void;
 }
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const PROMPT_LENGTHS: PromptLength[] = ['none', 'short', 'medium', 'long'];
 const CODE_STYLES: CodeStyle[] = ['standard', 'functional', 'oop'];
 
+// ─── Component ──────────────────────────────────────────────────────────
 export function PromptConfig({
   onClose,
   promptLength,
@@ -26,8 +48,10 @@ export function PromptConfig({
   onSetCodeStyle,
   onToggleSkill,
 }: PromptConfigProps): React.JSX.Element {
+  // ── State ─
   const [selectedIndex, setSelectedIndex] = useState(0); // 0-2 corresponding to the 3 rows
 
+  // ── Effects ─
   useInput((input, key) => {
     if (key.escape) {
       onClose();
@@ -57,6 +81,7 @@ export function PromptConfig({
     }
   });
 
+  // ── Handlers ──
   const renderRow = (label: string, valueDisplay: React.ReactNode, index: number) => {
     const isSelected = selectedIndex === index;
     return (
@@ -71,6 +96,7 @@ export function PromptConfig({
     );
   };
 
+  // ── Render ──
   return (
     <Box flexDirection="column">
       <Text bold color="yellow">Prompt Configuration</Text>

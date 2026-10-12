@@ -1,8 +1,19 @@
 /**
- * Core message types for ZenCLI chat.
- * Adapted from Zen — removed vscode/webview-specific fields.
+ * ------------------------------------------------------------------
+ * Message Types
+ * ------------------------------------------------------------------
+ * Định nghĩa các kiểu dữ liệu cốt lõi cho hệ thống tin nhắn trong ZenCLI.
+ * Bao gồm cấu trúc của một lượt hội thoại (Message), câu hỏi tương tác (Question)
+ * và câu trả lời người dùng (QuestionAnswer).
+ *
+ * Main types:
+ * - Message          : Đại diện cho một tin nhắn hoàn chỉnh (user/assistant/system)
+ * - Question         : Cấu trúc hiển thị bảng câu hỏi lựa chọn trong TUI
+ * - QuestionAnswer   : Dữ liệu phản hồi từ người dùng cho từng câu hỏi
+ * ------------------------------------------------------------------
  */
 
+// ─── Types & Interfaces ────────────────────────────────────────────────
 export type QuestionType = "single" | "multi" | "text" | "confirm";
 
 export interface Question {

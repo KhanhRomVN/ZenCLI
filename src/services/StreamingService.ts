@@ -6,7 +6,7 @@
  * - Callbacks are pure functions, no React state coupling
  */
 
-import type { Message } from "../types/message";
+import type { Message } from "../types/message.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 

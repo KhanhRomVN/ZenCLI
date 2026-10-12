@@ -1,11 +1,36 @@
+/**
+ * ------------------------------------------------------------------
+ * CommandList
+ * ------------------------------------------------------------------
+ * Danh sách lệnh hệ thống được hiển thị khi người dùng gõ "/" trong ô nhập liệu.
+ * Hỗ trợ điều hướng bằng phím mũi tên và chọn bằng Enter/Esc.
+ *
+ * Main features:
+ * - Hiển thị danh sách lệnh tĩnh (STATIC_COMMANDS)
+ * - Điều hướng con trỏ lên/xuống giữa các lệnh
+ * - Gửi lệnh đã chọn qua callback onSelect
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ───────────────────────────────────────────────────────────
+// ── React ──
 import React, { useState } from 'react'
+
+// ── UI ──
 import { Box, Text, useInput } from 'ink'
 
+// ─── Interfaces ────────────────────────────────────────────────────────
 interface CommandEntry {
   command: string
   description: string
 }
 
+interface CommandListProps {
+  onSelect?: (command: string) => void
+  onClose?: () => void
+}
+
+// ─── Constants ──────────────────────────────────────────────────────────
 // Base commands that don't change based on state
 const STATIC_COMMANDS: CommandEntry[] = [
   { command: '/model-account', description: 'Select provider, model and account' },
@@ -22,23 +47,18 @@ const STATIC_COMMANDS: CommandEntry[] = [
   { command: '/exit', description: 'Exit application' },
 ]
 
-interface CommandListProps {
-  onSelect?: (command: string) => void
-  onClose?: () => void
-}
-
-/**
- * Command list panel displayed below TextInput when user types "/"
- * as the first character. Supports ↑↓ navigation and Enter to select.
- */
+// ─── Component ──────────────────────────────────────────────────────────
 export function CommandList({
   onSelect,
   onClose,
 }: CommandListProps): React.JSX.Element {
+  // ── State ──
   const [cursorIndex, setCursorIndex] = useState(0)
 
+  // ── Derived ─
   const commands: CommandEntry[] = [...STATIC_COMMANDS]
 
+  // ── Effects ─
   useInput((input, key) => {
     if (key.escape) {
       onClose?.()
@@ -56,6 +76,7 @@ export function CommandList({
     }
   })
 
+  // ── Render ──
   return (
     <Box flexDirection="column" paddingX={1} marginTop={0}>
       {commands.map((entry, i) => {

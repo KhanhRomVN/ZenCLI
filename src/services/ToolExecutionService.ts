@@ -12,11 +12,11 @@
  */
 
 import { EventEmitter } from "events";
-import type { Message } from "../types/message";
-import type { ToolAction } from "../parsers/ResponseParser";
-import type { ToolOutput, ExecutorContext } from "../types/executor-types";
-import { getExecutor } from "./tool-executors";
-import { parseAIResponse } from "../parsers/ResponseParser";
+import type { Message } from "../types/message.js";
+import type { ToolAction } from "../parsers/ResponseParser.js";
+import type { ToolOutput, ExecutorContext } from "../types/executor-types.js";
+import { getExecutor } from "./tool-executors/index.js";
+import { parseAIResponse } from "../parsers/ResponseParser.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 

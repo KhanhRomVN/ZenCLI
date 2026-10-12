@@ -1,11 +1,36 @@
+/**
+ * ------------------------------------------------------------------
+ * Account Importer
+ * ------------------------------------------------------------------
+ * Công cụ nhập khẩu tài khoản từ tệp JSON vào hệ thống.
+ * So sánh dữ liệu mới với cơ sở dữ liệu hiện tại để phát hiện
+ * tài khoản mới, thay đổi hoặc trùng lặp trước khi ghi đè.
+ *
+ * Main features:
+ * - Chọn tệp JSON qua hộp thoại hệ thống (zenity) hoặc nhập đường dẫn thủ công
+ * - Phân tích nội dung: NEW (mới), CHANGED (khác credential), IDENTICAL (giống hệt), ERROR
+ * - Xem trước sự khác biệt (Diff view) cho từng tài khoản
+ * - Cho phép chọn/bỏ chọn từng mục trước khi import
+ * - Ghi đè credential cũ nếu được chọn
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ───────────────────────────────────────────────────────────
+// ── React ──
 import React, { useEffect, useRef, useState } from "react";
+
+// ── UI ──
 import { Box, Text, useInput } from "ink";
+
+// ── Node Modules ──
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
-import { fetchAccounts, createAccount, type Account } from "../services/api.js";
-import { logToFile } from "../services/api.js";
 
+// ── Services ─
+import { fetchAccounts, createAccount, type Account } from "../services/api.js";
+
+// ─── Types & Interfaces ────────────────────────────────────────────────
 interface ImportAccountProps {
   onClose: () => void;
 }
@@ -30,6 +55,7 @@ interface ParsedEntry {
   selected: boolean;
 }
 
+// ─── Helpers ────────────────────────────────────────────────────────────
 // Helper to normalize comparison keys
 const getKey = (email: string, providerId: string) =>
   `${providerId}|${email.toLowerCase().trim()}`;
@@ -70,9 +96,11 @@ function summarizeCredential(raw: string | null | undefined): string {
   }
 }
 
+// ─── Component ──────────────────────────────────────────────────────────
 export function ImportAccount({
   onClose,
 }: ImportAccountProps): React.JSX.Element {
+  // ── State ──
   const [filePath, setFilePath] = useState("");
   const [entries, setEntries] = useState<ParsedEntry[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -83,8 +111,11 @@ export function ImportAccount({
     type: "success" | "error" | "info";
   } | null>(null);
   const [step, setStep] = useState<"input" | "review">("input");
+  
+  // ── Refs ──
   const autoOpenedRef = useRef(false);
 
+  // ── Effects ──
   // Auto-open file picker and load immediately on mount
   useEffect(() => {
     if (!autoOpenedRef.current) {
@@ -93,10 +124,7 @@ export function ImportAccount({
     }
   }, []);
 
-  // Helper to normalize comparison keys
-  const getKey = (email: string, providerId: string) =>
-    `${providerId}|${email.toLowerCase().trim()}`;
-
+  // ── Callbacks ──
   const openFilePickerAndLoad = async () => {
     try {
       // Using zenity for native GTK file selection dialog on Linux/Ubuntu
@@ -112,7 +140,7 @@ export function ImportAccount({
     } catch (err) {
       // User cancelled or error occurred
       if (err instanceof Error && !err.message.includes("cancelled")) {
-         setMessage({ text: "Failed to read file via zenity.", type: "error" });
+        setMessage({ text: "Failed to read file via zenity.", type: "error" });
       }
     }
   };
@@ -213,9 +241,6 @@ export function ImportAccount({
       const changedCount = parsedEntries.filter(
         (e) => e.kind === "changed",
       ).length;
-      logToFile(
-        `ImportPreview: Total=${parsedEntries.length}, New=${newCount}, Changed=${changedCount}`,
-      );
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       setMessage({
@@ -245,8 +270,7 @@ export function ImportAccount({
 
     let msgParts = [];
     if (newCount > 0) msgParts.push(`${newCount} new`);
-    if (changedCount > 0)
-      msgParts.push(`${changedCount} override`);
+    if (changedCount > 0) msgParts.push(`${changedCount} override`);
 
     setMessage({
       text: `Processing ${toProcess.length} accounts (${msgParts.join(", ")})...`,
@@ -288,6 +312,7 @@ export function ImportAccount({
     }
   };
 
+  // ── Handlers ──
   useInput((input, key) => {
     if (key.escape) {
       if (step === "review") {
@@ -338,6 +363,7 @@ export function ImportAccount({
     }
   });
 
+  // ── Derived ──
   const getStatusColor = (kind: EntryKind) => {
     switch (kind) {
       case "new":
@@ -353,6 +379,7 @@ export function ImportAccount({
     }
   };
 
+  // ── Render ──
   return (
     <Box flexDirection="column" paddingX={1}>
       <Text bold color="yellow">
@@ -389,7 +416,9 @@ export function ImportAccount({
           {loading && <Text dimColor>Loading...</Text>}
 
           <Box marginTop={1}>
-            <Text dimColor>Press Enter to load, or Ctrl+O to browse files.</Text>
+            <Text dimColor>
+              Press Enter to load, or Ctrl+O to browse files.
+            </Text>
           </Box>
         </>
       )}
@@ -397,14 +426,12 @@ export function ImportAccount({
       {step === "review" && (
         <>
           <Box marginTop={1} marginBottom={1} justifyContent="space-between">
-            <Text bold>
-              Review: {entries.length} entries
-            </Text>
+            <Text bold>Review: {entries.length} entries</Text>
             <Text dimColor>
-              New: {entries.filter((e) => e.kind === "new").length} |{" "}
-              Changed: {entries.filter((e) => e.kind === "changed").length} |{" "}
-              Identical: {entries.filter((e) => e.kind === "identical").length} |{" "}
-              Selected: {entries.filter((e) => e.selected).length}
+              New: {entries.filter((e) => e.kind === "new").length} | Changed:{" "}
+              {entries.filter((e) => e.kind === "changed").length} | Identical:{" "}
+              {entries.filter((e) => e.kind === "identical").length} | Selected:{" "}
+              {entries.filter((e) => e.selected).length}
             </Text>
           </Box>
 
@@ -484,9 +511,11 @@ export function ImportAccount({
                     <Box flexDirection="column" marginLeft={7} marginBottom={1}>
                       {entry.kind === "new" && (
                         <>
-                          <Text dimColor>This is a new account to be created.</Text>
+                          <Text dimColor>
+                            This is a new account to be created.
+                          </Text>
                           <Text>
-                            Credential: 
+                            Credential:
                             <Text color="cyan">
                               {summarizeCredential(entry.incomingCredential)}
                             </Text>
@@ -558,9 +587,7 @@ export function ImportAccount({
                       )}
 
                       {entry.kind === "error" && (
-                        <Text color="red">
-                          Error: {entry.reason}
-                        </Text>
+                        <Text color="red">Error: {entry.reason}</Text>
                       )}
                     </Box>
                   )}

@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
+import { logToFile } from "./logger.js";
 
 export interface SavedSelection {
   providerId: string;
@@ -44,13 +45,27 @@ export function saveSelection(selection: SavedSelection): void {
  */
 export function loadSelection(): SavedSelection | null {
   try {
-    const filePath = getFilePath(process.cwd());
+    const cwd = process.cwd();
+    const filePath = getFilePath(cwd);
+    const hash = hashCwd(cwd);
+    // [DEBUG] Log selection loading details to file instead of terminal
+    logToFile(`[DEBUG][selectionStorage.loadSelection] cwd=${cwd}`);
+    logToFile(`[DEBUG][selectionStorage.loadSelection] hash=${hash}, filePath=${filePath}`);
+    logToFile(`[DEBUG][selectionStorage.loadSelection] exists=${fs.existsSync(filePath)}`);
+    
     if (!fs.existsSync(filePath)) return null;
     const raw = fs.readFileSync(filePath, "utf-8");
+    logToFile(`[DEBUG][selectionStorage.loadSelection] fileContent=${raw}`);
+    
     const parsed = JSON.parse(raw) as SavedSelection;
-    if (!parsed.providerId || !parsed.modelId) return null;
+    if (!parsed.providerId || !parsed.modelId) {
+      logToFile(`[DEBUG][selectionStorage.loadSelection] INVALID: missing providerId or modelId`);
+      return null;
+    }
+    logToFile(`[DEBUG][selectionStorage.loadSelection] SUCCESS: loaded ${JSON.stringify(parsed)}`);
     return parsed;
-  } catch {
+  } catch (err) {
+    logToFile(`[DEBUG][selectionStorage.loadSelection] ERROR: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }

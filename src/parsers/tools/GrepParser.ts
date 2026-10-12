@@ -1,5 +1,20 @@
-import { extractParamValue } from "../../utils/ToolParser";
+/**
+ * ------------------------------------------------------------------
+ * Grep Parser
+ * ------------------------------------------------------------------
+ * Phân tích tham số cho lệnh tìm kiếm nội dung (`grep`).
+ * Thực hiện xác thực cú pháp Regex và đảm bảo đầy đủ tham số bắt buộc (search_term, path).
+ *
+ * Main functions:
+ * - parseGrep() : Trả về GrepParams kèm cờ báo lỗi (_validationError) nếu phát hiện sai sót
+ * ------------------------------------------------------------------
+ */
 
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Utils ─
+import { extractParamValue } from "../../utils/ToolParser.js";
+
+// ─── Types & Interfaces ────────────────────────────────────────────────
 export interface GrepParams {
   search_term: string;
   file_path?: string;
@@ -8,6 +23,7 @@ export interface GrepParams {
   _validationError?: string; // Internal flag for invalid regex
 }
 
+// ─── Helpers ────────────────────────────────────────────────────────────
 /**
  * Validate regex pattern using Rust regex syntax
  * Returns error message if invalid, null if valid
@@ -40,6 +56,7 @@ const validateRegexPattern = (pattern: string): string | null => {
   }
 };
 
+// ─── Functions ──────────────────────────────────────────────────────────
 export const parseGrep = (innerContent: string): GrepParams => {
   // Parse according to tools-reference.ts schema: search_term (required), file_path OR folder_path (one required)
   const searchTerm = extractParamValue(innerContent, "search_term");

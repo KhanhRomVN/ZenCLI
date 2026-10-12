@@ -1,5 +1,20 @@
-import { extractParamValue } from "../../utils/ToolParser";
+/**
+ * ------------------------------------------------------------------
+ * Git Status Parser
+ * ------------------------------------------------------------------
+ * Trích xuất tham số cho lệnh kiểm tra trạng thái Git (`git_status`).
+ * Hỗ trợ cả dạng danh sách object đã parse lẫn chuỗi JSON thô.
+ *
+ * Main functions:
+ * - parseGitStatus() : Chuyển đổi nội dung XML tag thành cấu trúc dữ liệu có thể dùng được
+ * ------------------------------------------------------------------
+ */
 
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Utils ─
+import { extractParamValue } from "../../utils/ToolParser.js";
+
+// ─── Types & Interfaces ────────────────────────────────────────────────
 export interface GitStatusItem {
   status: string;
   path: string;
@@ -15,6 +30,7 @@ export interface GitStatusParams {
   raw?: string;
 }
 
+// ─── Functions ──────────────────────────────────────────────────────────
 export const parseGitStatus = (innerContent: string): GitStatusParams => {
   const items = extractParamValue(innerContent, "items");
   const branch = extractParamValue(innerContent, "branch") || undefined;

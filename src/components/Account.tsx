@@ -1,8 +1,30 @@
+/**
+ * ------------------------------------------------------------------
+ * Account Management
+ * ------------------------------------------------------------------
+ * Giao diện quản lý tài khoản AI đã lưu. Cho phép xem danh sách theo nhà cung cấp,
+ * kiểm tra tình trạng sử dụng (quota, token), xóa tài khoản và xem chi tiết credential.
+ *
+ * Main features:
+ * - Lọc tài khoản theo Provider (Tab navigation)
+ * - Phân trang cục bộ để hiển thị mượt mà trên terminal
+ * - Hiển thị bảng thông tin: Email, Requests, Tokens, Usage %, Reset time, Expiry
+ * - Hành động nhanh: Xóa (D), Làm mới Token (R - placeholder)
+ * - Chi tiết mở rộng khi nhấn Enter vào một dòng
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── React ─
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+
+// ── UI ──
 import { Box, Text, useInput } from "ink";
+
+// ── Services ──
 import { fetchAccounts, deleteAccount, type Account as ApiAccount, type AccountsResponse } from "../services/api.js";
 
-// ─── Types ─────────────────────────────────────────────────────────────
+// ─── Types & Interfaces ────────────────────────────────────────────────
 interface ProviderConfig {
   provider_id: string;
   provider_name: string;
@@ -23,6 +45,10 @@ interface Account extends Omit<ApiAccount, 'provider'> {
 }
 
 type ViewMode = "list" | "detail";
+
+// ─── Constants ──────────────────────────────────────────────────────────
+const PAGE_SIZE_LOCAL = 8; // Items displayed per screen in CLI
+const FETCH_LIMIT_ALL = 9999; // High limit to fetch all accounts at once for consistency
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 function getProviderColor(providerId: string): string {
@@ -76,10 +102,8 @@ function formatExpiryLabel(account: Account): { text: string; color: string } {
 }
 
 // ─── Component ──────────────────────────────────────────────────────────
-const PAGE_SIZE_LOCAL = 8; // Items displayed per screen in CLI
-const FETCH_LIMIT_ALL = 9999; // High limit to fetch all accounts at once for consistency
-
 export function Account({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }): React.JSX.Element | null {
+  // ── State ──
   const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [providers, setProviders] = useState<Record<string, ProviderConfig>>({});
   
@@ -93,6 +117,7 @@ export function Account({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
+  // ── Effects ──
   // Load data when opened
   useEffect(() => {
     if (!isOpen) return;
@@ -133,6 +158,7 @@ export function Account({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
       });
   }, [isOpen]);
 
+  // ── Derived ──
   // Derive Tabs from FULL dataset
   const tabs = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -174,6 +200,7 @@ export function Account({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
     return !!prov?.can_refresh_token;
   }, [currentFocusedAccount, providers]);
 
+  // ── Callbacks ──
   const handleDelete = async (id: string) => {
     try {
       await deleteAccount(id);
@@ -197,6 +224,7 @@ export function Account({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
     }
   };
 
+  // ── Handlers ──
   useInput((input, key) => {
     if (!isOpen) return;
 
@@ -322,6 +350,7 @@ export function Account({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
 
   const isActionMode = selectedAccountId !== null;
 
+  // ── Render ──
   return (
     <Box flexDirection="column">
       {/* Header & Tabs */}

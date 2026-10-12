@@ -1,5 +1,5 @@
-import { findClosingTagPosition } from "../../utils/TagClosingFinder";
-import { getAllToolTypes } from "../../constants/tag-registry";
+import { findClosingTagPosition } from "../../utils/TagClosingFinder.js";
+import { getAllToolTypes } from "../../constants/tag-registry.js";
 
 export interface ThinkingExtractResult {
   remainingContent: string;

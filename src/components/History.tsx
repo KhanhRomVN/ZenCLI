@@ -1,33 +1,33 @@
+/**
+ * ------------------------------------------------------------------
+ * Conversation History
+ * ------------------------------------------------------------------
+ * Quản lý lịch sử các cuộc hội thoại đã lưu trên đĩa cứng.
+ * Cho phép duyệt danh sách, tải lại cuộc trò chuyện cũ và mở thư mục chứa nó.
+ *
+ * Main features:
+ * - Đọc metadata từ ~/.khanhromvn-zen/projects/{hash}/{id}.json
+ * - Phân trang và điều hướng bằng phím mũi tên
+ * - Hiển thị thông tin chi tiết: Thời gian, Số lượng tin nhắn, Token, Model
+ * - Mở thư mục gốc của cuộc hội thoại bằng phím 'o'
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── React ─
 import React, { useState, useEffect } from "react";
+
+// ── UI ──
 import { Box, Text, useInput } from "ink";
+
+// ── Node Modules ──
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import * as os from "os";
 import { exec } from "child_process";
-import { logToFile } from "../services/api";
 
-// Helper to open folder in system file manager
-const openFolder = (folderPath: string) => {
-  const platform = process.platform;
-  let command = "";
-  
-  if (platform === "darwin") {
-    command = `open "${folderPath}"`;
-  } else if (platform === "win32") {
-    command = `start "" "${folderPath}"`;
-  } else {
-    // Linux and others
-    command = `xdg-open "${folderPath}"`;
-  }
-
-  exec(command, (error) => {
-    if (error) {
-      console.error(`Error opening folder: ${error.message}`);
-    }
-  });
-};
-
+// ─── Interfaces ────────────────────────────────────────────────────────
 interface ConversationEntry {
   id: string;
   title: string;
@@ -46,7 +46,30 @@ interface HistoryProps {
   onLoadConversation: (conversationId: string) => void;
 }
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const PAGE_SIZE = 10;
+
+// ─── Helpers ───────────────────────────────────────────────────────────
+// Helper to open folder in system file manager
+const openFolder = (folderPath: string) => {
+  const platform = process.platform;
+  let command = "";
+
+  if (platform === "darwin") {
+    command = `open "${folderPath}"`;
+  } else if (platform === "win32") {
+    command = `start "" "${folderPath}"`;
+  } else {
+    // Linux and others
+    command = `xdg-open "${folderPath}"`;
+  }
+
+  exec(command, (error) => {
+    if (error) {
+      console.error(`Error opening folder: ${error.message}`);
+    }
+  });
+};
 
 /**
  * Formats a timestamp into a human-readable relative time string.
@@ -55,9 +78,9 @@ const PAGE_SIZE = 10;
 function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
   const diffMs = now - timestamp;
-  
+
   if (diffMs < 0) return "just now";
-  
+
   const seconds = Math.floor(diffMs / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
@@ -75,6 +98,7 @@ function formatRelativeTime(timestamp: number): string {
   return `${years}y ago`;
 }
 
+// ─── Component ──────────────────────────────────────────────────────────
 /**
  * Reads conversation history from ~/.khanhromvn-zen/projects/{projectHash}/
  */
@@ -83,12 +107,14 @@ export function History({
   onClose,
   onLoadConversation,
 }: HistoryProps): React.JSX.Element | null {
+  // ── State ──
   const [conversations, setConversations] = useState<ConversationEntry[]>([]);
   const [cursorIndex, setCursorIndex] = useState(0); // Global index across all pages
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
 
+  // ── Effects ──
   // Load conversations from filesystem
   useEffect(() => {
     if (!isOpen) return;
@@ -107,12 +133,7 @@ export function History({
           projectHash,
         );
 
-        // [DEBUG] Log thông tin đường dẫn
-        logToFile(`[HISTORY_DEBUG] Loading history from: ${projectsDir}`);
-        logToFile(`[HISTORY_DEBUG] CWD: ${cwd}, Hash: ${projectHash}`);
-
         if (!fs.existsSync(projectsDir)) {
-          logToFile(`[HISTORY_DEBUG] Directory does not exist. Returning empty.`);
           setConversations([]);
           setTotalCount(0);
           setLoading(false);
@@ -122,17 +143,14 @@ export function History({
         const entries = await fs.promises.readdir(projectsDir, {
           withFileTypes: true,
         });
-        
-        logToFile(`[HISTORY_DEBUG] Found ${entries.length} entries in directory.`);
-        
+
         const history: ConversationEntry[] = [];
 
         for (const entry of entries) {
           if (!entry.isDirectory()) {
-             logToFile(`[HISTORY_DEBUG] Skipping non-directory: ${entry.name}`);
-             continue;
+            continue;
           }
-          
+
           const conversationId = entry.name;
           const jsonPath = path.join(
             projectsDir,
@@ -141,39 +159,38 @@ export function History({
           );
 
           if (!fs.existsSync(jsonPath)) {
-             logToFile(`[HISTORY_DEBUG] JSON not found for dir ${conversationId}: ${jsonPath}`);
-             continue;
+            continue;
           }
-          
-          logToFile(`[HISTORY_DEBUG] Found valid conversation folder: ${conversationId}`);
 
           try {
             const content = await fs.promises.readFile(jsonPath, "utf-8");
             const data = JSON.parse(content);
 
             if (!data.metadata) {
-               logToFile(`[HISTORY_DEBUG] Skipping ${conversationId}: No metadata found in JSON.`);
-               continue;
+              continue;
             }
 
             // Extract provider/model from the first assistant message if available
             let providerId: string | undefined;
             let modelId: string | undefined;
-            
+
             if (Array.isArray(data.messages)) {
-              const firstAssistantMsg = data.messages.find((m: any) => m.role === "assistant");
+              const firstAssistantMsg = data.messages.find(
+                (m: any) => m.role === "assistant",
+              );
               if (firstAssistantMsg) {
-                providerId = firstAssistantMsg.providerId || firstAssistantMsg.provider_id;
-                modelId = firstAssistantMsg.modelId || firstAssistantMsg.model_id;
+                providerId =
+                  firstAssistantMsg.providerId || firstAssistantMsg.provider_id;
+                modelId =
+                  firstAssistantMsg.modelId || firstAssistantMsg.model_id;
               }
             }
 
             // Determine source environment; default to vscode-extension for backward compatibility
-            const sourceEnv = data.metadata.sourceEnvironment === "terminal" 
-              ? "terminal" 
-              : "vscode-extension";
-
-            logToFile(`[HISTORY_DEBUG] Successfully loaded conversation: ${conversationId} (${sourceEnv})`);
+            const sourceEnv =
+              data.metadata.sourceEnvironment === "terminal"
+                ? "terminal"
+                : "vscode-extension";
 
             history.push({
               id: conversationId,
@@ -193,10 +210,10 @@ export function History({
 
         // Sort by lastModified descending
         history.sort((a, b) => b.lastModified - a.lastModified);
-        
+
         setTotalCount(history.length);
         // Store all in state, but only render current page slice
-        setConversations(history); 
+        setConversations(history);
       } catch {
         setConversations([]);
         setTotalCount(0);
@@ -208,6 +225,7 @@ export function History({
     loadHistory();
   }, [isOpen]);
 
+  // ── Derived ─
   // Calculate visible items based on pagination
   const startIndex = page * PAGE_SIZE;
   const endIndex = startIndex + PAGE_SIZE;
@@ -285,8 +303,7 @@ export function History({
         projectHash,
         conv.id,
       );
-      
-      logToFile(`[HISTORY_DEBUG] Opening folder: ${folderPath}`);
+
       openFolder(folderPath);
     }
   });
@@ -299,10 +316,12 @@ export function History({
         {"Conversation History"}
       </Text>
       <Text dimColor>{"View and restore previous sessions."}</Text>
-      
+
       {/* Header Info */}
       <Box justifyContent="space-between" marginTop={1}>
-        <Text dimColor>Page {page + 1} of {totalPages}</Text>
+        <Text dimColor>
+          Page {page + 1} of {totalPages}
+        </Text>
         <Text dimColor>Total: {totalCount}</Text>
       </Box>
 
@@ -311,18 +330,18 @@ export function History({
         {!loading && totalCount === 0 && (
           <Text dimColor>No conversations found</Text>
         )}
-        
+
         {visibleConversations.map((conv, i) => {
           const globalIndex = startIndex + i;
           const isSelected = globalIndex === cursorIndex;
-          
+
           return (
             <Box key={conv.id} flexDirection="column">
               <Box>
                 <Text color={isSelected ? "green" : "gray"}>
                   {isSelected ? "❯ " : "  "}
                 </Text>
-                
+
                 {/* Time Column */}
                 <Box width={10}>
                   <Text color={isSelected ? "cyanBright" : "gray"}>
@@ -332,32 +351,32 @@ export function History({
 
                 {/* Title & Metadata Column */}
                 <Box flexGrow={1} flexDirection="column">
-                   <Text 
-                     color={isSelected ? "cyanBright" : "white"} 
-                     bold={isSelected}
-                   >
-                     {conv.title.substring(0, 55)}
-                   </Text>
-                   
-                   <Box flexDirection="row" gap={1} alignItems="center">
-                     <Text 
-                       color={isSelected ? "magenta" : "gray"} 
-                     >
-                       {`${conv.messageCount} msgs • ${conv.totalTokens.toLocaleString()} token`}
-                       {conv.providerId && conv.modelId ? ` • ${conv.providerId}/${conv.modelId}` : ""}
-                     </Text>
-                     
-                     {/* Source Environment Badge */}
-                     {conv.sourceEnvironment === "terminal" ? (
-                       <Text color="cyan" dimColor={!isSelected}>
-                         {" • Terminal"}
-                       </Text>
-                     ) : (
-                       <Text color="magenta" dimColor={!isSelected}>
-                         {" • VSCode"}
-                       </Text>
-                     )}
-                   </Box>
+                  <Text
+                    color={isSelected ? "cyanBright" : "white"}
+                    bold={isSelected}
+                  >
+                    {conv.title.substring(0, 55)}
+                  </Text>
+
+                  <Box flexDirection="row" gap={1} alignItems="center">
+                    <Text color={isSelected ? "magenta" : "gray"}>
+                      {`${conv.messageCount} msgs • ${conv.totalTokens.toLocaleString()} token`}
+                      {conv.providerId && conv.modelId
+                        ? ` • ${conv.providerId}/${conv.modelId}`
+                        : ""}
+                    </Text>
+
+                    {/* Source Environment Badge */}
+                    {conv.sourceEnvironment === "terminal" ? (
+                      <Text color="cyan" dimColor={!isSelected}>
+                        {" • Terminal"}
+                      </Text>
+                    ) : (
+                      <Text color="magenta" dimColor={!isSelected}>
+                        {" • VSCode"}
+                      </Text>
+                    )}
+                  </Box>
                 </Box>
               </Box>
             </Box>
@@ -366,7 +385,11 @@ export function History({
       </Box>
 
       <Box marginTop={1}>
-        <Text dimColor>{"↑↓ navigate · ←→ page · Enter load · O open folder · Esc(Ctrl+C) close"}</Text>
+        <Text dimColor>
+          {
+            "↑↓ navigate · ←→ page · Enter load · O open folder · Esc(Ctrl+C) close"
+          }
+        </Text>
       </Box>
     </Box>
   );

@@ -1,28 +1,40 @@
 /**
- * Tool Executor Factory for ZenCLI.
- * Maps action.type → concrete executor instance.
+ * ------------------------------------------------------------------
+ * Tool Executor Factory
+ * ------------------------------------------------------------------
+ * Nhà máy sản xuất (Factory Pattern) ánh xạ tên loại hành động (action.type) 
+ * sang Instance cụ thể của Class thực thi tương ứng.
+ *
+ * Main functions:
+ * - getExecutor() : Trả về object ToolExecutor phù hợp hoặc null nếu không tìm thấy
+ * ------------------------------------------------------------------
  */
 
-import type { ToolExecutor } from "../../types/executor-types";
-import { ReadFileExecutor } from "./ReadFileExecutor";
-import { WriteToFileExecutor } from "./WriteToFileExecutor";
-import { ReplaceInFileExecutor } from "./ReplaceInFileExecutor";
-import { DeleteFileExecutor } from "./DeleteFileExecutor";
-import { ListFilesExecutor } from "./ListFilesExecutor";
-import { FindFilesExecutor } from "./FindFilesExecutor";
-import { GrepExecutor } from "./GrepExecutor";
-import { RunCommandExecutor } from "./RunCommandExecutor";
-import { GitStatusExecutor } from "./GitStatusExecutor";
-import { GitDiffExecutor } from "./GitDiffExecutor";
-import { CommitMessageExecutor } from "./CommitMessageExecutor";
-import { RevertFileExecutor } from "./RevertFileExecutor";
-import { ViewReplaceHistoryExecutor } from "./ViewReplaceHistoryExecutor";
-import { SearchSkillExecutor } from "./SearchSkillExecutor";
-import { ListSkillExecutor } from "./ListSkillExecutor";
-import { ReadSkillExecutor } from "./ReadSkillExecutor";
-import { InstallSkillExecutor } from "./InstallSkillExecutor";
-import { ConversationTitleExecutor } from "./ConversationTitleExecutor";
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Types 
+import type { ToolExecutor } from "../../types/executor-types.js";
 
+// ── Executors ─
+import { ReadFileExecutor } from "./ReadFileExecutor.js";
+import { WriteToFileExecutor } from "./WriteToFileExecutor.js";
+import { ReplaceInFileExecutor } from "./ReplaceInFileExecutor.js";
+import { DeleteFileExecutor } from "./DeleteFileExecutor.js";
+import { ListFilesExecutor } from "./ListFilesExecutor.js";
+import { FindFilesExecutor } from "./FindFilesExecutor.js";
+import { GrepExecutor } from "./GrepExecutor.js";
+import { RunCommandExecutor } from "./RunCommandExecutor.js";
+import { GitStatusExecutor } from "./GitStatusExecutor.js";
+import { GitDiffExecutor } from "./GitDiffExecutor.js";
+import { CommitMessageExecutor } from "./CommitMessageExecutor.js";
+import { RevertFileExecutor } from "./RevertFileExecutor.js";
+import { ViewReplaceHistoryExecutor } from "./ViewReplaceHistoryExecutor.js";
+import { SearchSkillExecutor } from "./SearchSkillExecutor.js";
+import { ListSkillExecutor } from "./ListSkillExecutor.js";
+import { ReadSkillExecutor } from "./ReadSkillExecutor.js";
+import { InstallSkillExecutor } from "./InstallSkillExecutor.js";
+import { ConversationTitleExecutor } from "./ConversationTitleExecutor.js";
+
+// ─── Functions ──────────────────────────────────────────────────────────
 export function getExecutor(actionType: string): ToolExecutor | null {
   switch (actionType) {
     case "read_file":

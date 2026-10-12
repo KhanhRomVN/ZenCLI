@@ -1,4 +1,4 @@
-import { extractParamValue } from "../../utils/ToolParser";
+import { extractParamValue } from "../../utils/ToolParser.js";
 
 export interface DeleteFileParams {
   file_path: string;

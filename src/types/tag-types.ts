@@ -1,14 +1,20 @@
 /**
- * Tag and Tool Type Definitions
- * Adapted from Zen for ZenCLI — no vscode dependencies.
+ * ------------------------------------------------------------------
+ * Tag & Tool Types
+ * ------------------------------------------------------------------
+ * Định nghĩa hệ thống phân loại Tag (Tool vs UI) và cơ chế cấp quyền (Permission).
+ * Dùng để điều phối cách xử lý các khối XML trong output của AI.
+ *
+ * Main types:
+ * - PermissionMode   : Chế độ hoạt động chung (Full Access hay Ask Approval)
+ * - TagDefinition    : Mô tả chi tiết thuộc tính của một Tag cụ thể
+ * - ToolType/UitTagType : Alias tiện lợi cho việc khai báo biến
+ * ------------------------------------------------------------------
  */
 
-// ============= PERMISSION TYPES =============
-
+// ─── Types & Interfaces ────────────────────────────────────────────────
 export type PermissionMode = "fullAccess" | "approval";
 export type PermissionValue = "allow" | "confirm" | "reject" | RegExp;
-
-// ============= TAG TYPES =============
 
 export type TagCategory = "tool" | "ui";
 

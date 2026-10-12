@@ -2,16 +2,16 @@
  * ------------------------------------------------------------------
  * Fuzzy Matcher
  * ------------------------------------------------------------------
- * Tìm kiếm fuzzy trong nội dung file: dùng Fuse.js để tìm anchor
- * line, sau đó xác minh toàn bộ block.
+ * Thuật toán tìm kiếm khớp mờ (fuzzy matching) cho phép thay thế code ngay cả khi
+ * có sự khác biệt nhỏ về khoảng trắng hoặc định dạng so với bản gốc.
+ * Sử dụng chiến lược 2 giai đoạn: Tìm Anchor Line bằng Fuse.js -> Xác minh Block bằng Bigram Similarity.
  *
  * Main functions:
- * - findMatch() : Tìm vị trí khớp gần đúng nhất của searchBlock
- *                 trong fileContent
+ * - findMatch() : Trả về đối tượng MatchResult chứa vị trí và độ tương đồng cao nhất
  * ------------------------------------------------------------------
  */
 
-// ─── Imports ────────────────────────────────────────────────────────────
+// ─── Imports ───────────────────────────────────────────────────────────
 // ── External ──
 import Fuse from "fuse.js";
 

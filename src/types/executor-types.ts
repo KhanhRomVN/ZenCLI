@@ -1,8 +1,18 @@
 /**
- * Executor types for ZenCLI — adapted from Zen's executor-types.ts.
- * Removes React/webview dependencies; uses plain Node.js interfaces.
+ * ------------------------------------------------------------------
+ * Executor Types
+ * ------------------------------------------------------------------
+ * Hợp đồng giao tiếp giữa Engine thực thi Tool và môi trường xung quanh.
+ * Đảm bảo tính độc lập của các Executor khỏi framework UI (React/Webview).
+ *
+ * Main types:
+ * - ToolOutput       : Kết quả trả về sau khi chạy xong một Action
+ * - ExecutorContext  : Bối cảnh chia sẻ (đường dẫn, hàm setter, timeout...)
+ * - ToolExecutor     : Interface chuẩn hóa cho mọi class thực thi Tool
+ * ------------------------------------------------------------------
  */
 
+// ─── Types & Interfaces ────────────────────────────────────────────────
 export interface ToolOutput {
   output: string;
   isError: boolean;

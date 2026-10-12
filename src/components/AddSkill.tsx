@@ -1,5 +1,26 @@
+/**
+ * ------------------------------------------------------------------
+ * Add Skill Installer
+ * ------------------------------------------------------------------
+ * Giao diện tìm kiếm và cài đặt Skill từ marketplace (mcp.directory).
+ * Hỗ trợ xem trước chi tiết skill trước khi quyết định cài đặt.
+ *
+ * Main features:
+ * - Tìm kiếm skill theo keyword với phân trang
+ * - Xem chi tiết mô tả, tác giả, lượt tải và nội dung hướng dẫn
+ * - Cài đặt skill trực tiếp vào hệ thống local
+ * - Đánh dấu các skill đã được cài đặt sẵn
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── React ─
 import React, { useEffect, useState } from "react";
+
+// ── UI ──
 import { Box, Text, useInput } from "ink";
+
+// ── Services ──
 import {
   searchSkills,
   fetchSkillDetail,
@@ -10,13 +31,17 @@ import {
 } from "../services/SkillService.js";
 import { logToFile } from "../services/api.js";
 
+// ─── Interfaces ────────────────────────────────────────────────────────
 interface AddSkillProps {
   onClose: (reason?: "user_cancel" | "closed" | "done", payload?: any) => void;
 }
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const PAGE_SIZE = 12;
 
+// ─── Component ─────────────────────────────────────────────────────────
 export function AddSkill({ onClose }: AddSkillProps): React.JSX.Element {
+  // ── State ──
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SkillSummary[]>([]);
   const [installedSlugs, setInstalledSlugs] = useState<Set<string>>(new Set());
@@ -32,12 +57,14 @@ export function AddSkill({ onClose }: AddSkillProps): React.JSX.Element {
   const [selectedSkill, setSelectedSkill] = useState<SkillDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // ── Effects ──
   // Load initial list and installed status on mount
   useEffect(() => {
     loadPage(1);
     refreshInstalledStatus();
   }, []);
 
+  // ── Callbacks ──
   const refreshInstalledStatus = () => {
     const installed = listInstalledSkills();
     setInstalledSlugs(new Set(installed.map(s => s.slug)));
@@ -122,6 +149,7 @@ export function AddSkill({ onClose }: AddSkillProps): React.JSX.Element {
     }
   };
 
+  // ── Handlers ──
   // Handle input based on current step
   useInput((input, key) => {
     if (key.escape || (key.ctrl && input === "c")) {

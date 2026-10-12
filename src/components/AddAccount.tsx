@@ -1,11 +1,35 @@
+/**
+ * ------------------------------------------------------------------
+ * Add Account Wizard
+ * ------------------------------------------------------------------
+ * Quy trình đa bước để thêm tài khoản AI mới vào hệ thống.
+ * Hỗ trợ chọn Provider, Phương thức xác thực (OAuth/Basic), Hồ sơ trình duyệt (Chromium Profile)
+ * và lưu trữ Credential sau khi đăng nhập thành công.
+ *
+ * Main features:
+ * - Bước 1: Chọn nhà cung cấp từ danh sách khả dụng
+ * - Bước 2: Chọn phương thức xác thực phù hợp với provider đó
+ * - Bước 3: Chọn hồ sơ trình duyệt (nếu là loại Browser-based) hoặc dùng mặc định
+ * - Bước 4: Chờ xác thực (Device Code Flow) hoặc điền thông tin trực tiếp
+ * - Bước 5: Xác nhận và lưu tài khoản vào cơ sở dữ liệu cục bộ
+ * - Điều hướng linh hoạt bằng phím mũi tên, Enter/Esc và tự động cuộn danh sách dài
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── React 
 import React, { useState, useEffect, useRef, useMemo } from "react";
+
+// ── Node Modules ──
 import * as fs from "fs";
-import * as path from "path";
+
+// ── UI ─
 import { Box, Text, useInput } from "ink";
-import TextInput from "ink-text-input";
+
+// ── Services ──
 import { getApiUrl } from "../services/api.js";
 
-// ─── Types ────────────────────────────────────────────────────────────
+// ─── Types & Interfaces ────────────────────────────────────────────────
 interface RawProvider {
   provider_id: string;
   provider_name: string;
@@ -13,7 +37,7 @@ interface RawProvider {
   website?: string;
   website_url?: string;
   connection_type?: string; // 'https' | 'browser'
-  auth_methods?: string[]; 
+  auth_methods?: string[];
   auth_method?: string; // Sometimes returned as single string or comma-separated
   is_enabled?: boolean;
 }
@@ -50,17 +74,19 @@ interface AddAccountProps {
   onSuccess: () => void;
 }
 
-type Step = 
-  | "select-provider" 
-  | "select-method" 
+type Step =
+  | "select-provider"
+  | "select-method"
   | "select-profile"
-  | "initiating-login" 
-  | "waiting-auth" 
+  | "initiating-login"
+  | "waiting-auth"
   | "confirm-save";
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const PAGE_SIZE_PROVIDERS = 6; // Number of provider cards per page
 const PAGE_SIZE_PROFILES = 8; // Number of profile rows per page
 
+// ─── Helpers ────────────────────────────────────────────────────────────
 /**
  * Helper to normalize auth methods from various API response formats.
  * Backend may return either `auth_methods` or `auth_method`, and the value
@@ -120,21 +146,28 @@ function getDomain(url: string | undefined): string {
   }
 }
 
+// ─── Component ──────────────────────────────────────────────────────────
 /**
  * Modern Minimalist TUI Component for adding accounts.
  * Features: High-density list, accent-based selection, rich metadata tags.
  */
-export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.Element {
+export function AddAccount({
+  onClose,
+  onSuccess,
+}: AddAccountProps): React.JSX.Element {
+  // ── State ─
   const [step, setStep] = useState<Step>("select-provider");
   const [rawProviders, setRawProviders] = useState<RawProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Selection State
   const [cursorIndex, setCursorIndex] = useState(0); // Absolute index in the full list
-  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(
+    null,
+  );
   const [selectedMethod, setSelectedMethod] = useState<string>("");
-  
+
   // Login State
   const [pendingLogin, setPendingLogin] = useState<PendingLogin | null>(null);
   const [draftAccount, setDraftAccount] = useState<AccountDraft | null>(null);
@@ -146,17 +179,22 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [profilesError, setProfilesError] = useState<string | null>(null);
 
+  // ── Refs ──
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Derived ─
   // Normalize providers once loaded
   const providers: Provider[] = useMemo(() => {
-    return rawProviders.map(p => ({
-      ...p,
-      authMethodsList: normalizeAuthMethods(p),
-    })).sort((a, b) => {
-      if (a.is_enabled === b.is_enabled) return a.provider_name.localeCompare(b.provider_name);
-      return a.is_enabled ? -1 : 1;
-    });
+    return rawProviders
+      .map((p) => ({
+        ...p,
+        authMethodsList: normalizeAuthMethods(p),
+      }))
+      .sort((a, b) => {
+        if (a.is_enabled === b.is_enabled)
+          return a.provider_name.localeCompare(b.provider_name);
+        return a.is_enabled ? -1 : 1;
+      });
   }, [rawProviders]);
 
   // Scrolling window for providers: keep cursor centered-ish within PAGE_SIZE_PROVIDERS rows
@@ -172,9 +210,13 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
     return start;
   }, [cursorIndex, providers.length]);
 
-  const visibleProviders = providers.slice(providerStart, providerStart + PAGE_SIZE_PROVIDERS);
+  const visibleProviders = providers.slice(
+    providerStart,
+    providerStart + PAGE_SIZE_PROVIDERS,
+  );
 
-  // ─── Fetch Providers ──────────────────────────────────────────────────
+  // ── Effects ─
+  // ── Fetch Providers ──────────────────────────────────────────────────
   useEffect(() => {
     const fetchProviders = async () => {
       try {
@@ -193,7 +235,7 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
       }
     };
     fetchProviders();
-    
+
     return () => {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
@@ -204,20 +246,19 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
     setCursorIndex(0);
   }, [step, selectedProvider?.provider_id]);
 
-  // ─── Handlers ─────────────────────────────────────────────────────────
-  
+  // ── Callbacks ──
   const handleSelectProvider = () => {
     // cursorIndex is now absolute across the whole list, so read from `providers`
     const p = providers[cursorIndex];
     if (!p || p.is_enabled === false) return;
-    
+
     setSelectedProvider(p);
-    
-    const methods = p.authMethodsList; 
-    
+
+    const methods = p.authMethodsList;
+
     if (methods.length === 0) {
-       setError("No authentication methods configured for this provider.");
-       return;
+      setError("No authentication methods configured for this provider.");
+      return;
     }
 
     if (methods.length === 1) {
@@ -254,7 +295,9 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
       if (!dir) {
         setProfileFolders([]);
         setProfileBaseDir("");
-        setProfilesError("chromium_profile_dir chưa được cấu hình trong Settings");
+        setProfilesError(
+          "chromium_profile_dir chưa được cấu hình trong Settings",
+        );
         return;
       }
       setProfileBaseDir(dir);
@@ -279,29 +322,40 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
     }
   };
 
-  const startLoginFlow = async (provider: Provider, method: string, profileFolder?: string) => {
+  const startLoginFlow = async (
+    provider: Provider,
+    method: string,
+    profileFolder?: string,
+  ) => {
     setStep("initiating-login");
     setError(null);
-    
+
     try {
-      const res = await fetch(`${getApiUrl()}/v1/accounts/login/${provider.provider_id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          method, 
-          ...(profileFolder ? { profile_folder: profileFolder } : {}) 
-        }),
-      });
-      
+      const res = await fetch(
+        `${getApiUrl()}/v1/accounts/login/${provider.provider_id}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            method,
+            ...(profileFolder ? { profile_folder: profileFolder } : {}),
+          }),
+        },
+      );
+
       const data: any = await res.json();
-      
+
       if (!res.ok || !data.success) {
         throw new Error(data.message || "Login initiation failed");
       }
-      
+
       const accountData = data.account;
-      
-      if (accountData.pending && accountData.user_code && accountData.verification_url) {
+
+      if (
+        accountData.pending &&
+        accountData.user_code &&
+        accountData.verification_url
+      ) {
         setPendingLogin({
           user_code: accountData.user_code,
           verification_url: accountData.verification_url,
@@ -311,10 +365,14 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
           method,
         });
         setStep("waiting-auth");
-        startPolling(accountData.pollContext || accountData.tempSessionId, provider.provider_id, (accountData.poll_interval || 5) * 1000);
+        startPolling(
+          accountData.pollContext || accountData.tempSessionId,
+          provider.provider_id,
+          (accountData.poll_interval || 5) * 1000,
+        );
         return;
       }
-      
+
       if (accountData.credential) {
         setDraftAccount({
           provider_id: provider.provider_id,
@@ -325,59 +383,68 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
         setStep("confirm-save");
         return;
       }
-      
+
       if (accountData.pending && accountData.tempSessionId) {
-         setDraftAccount({
-           provider_id: provider.provider_id,
-           email: accountData.email || "",
-           credential: accountData.credential || "",
-           auth_method: method,
-         });
-         setStep("confirm-save");
-         return;
+        setDraftAccount({
+          provider_id: provider.provider_id,
+          email: accountData.email || "",
+          credential: accountData.credential || "",
+          auth_method: method,
+        });
+        setStep("confirm-save");
+        return;
       }
 
       throw new Error("Unexpected login response structure");
-
     } catch (err: any) {
       setError(err.message || "An error occurred during login initiation");
       setStep("select-method");
     }
   };
 
-  const startPolling = (context: string, providerId: string, intervalMs: number) => {
+  const startPolling = (
+    context: string,
+    providerId: string,
+    intervalMs: number,
+  ) => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-    
-    pollTimerRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`${getApiUrl()}/v1/accounts/login/${providerId}/poll`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pollContext: context }),
-        });
-        const data: any = await res.json();
-        
-        if (data.error) {
-          stopPolling();
-          setError(data.error);
-          setStep("select-method");
-          return;
+
+    pollTimerRef.current = setInterval(
+      async () => {
+        try {
+          const res = await fetch(
+            `${getApiUrl()}/v1/accounts/login/${providerId}/poll`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ pollContext: context }),
+            },
+          );
+          const data: any = await res.json();
+
+          if (data.error) {
+            stopPolling();
+            setError(data.error);
+            setStep("select-method");
+            return;
+          }
+
+          if (data.done && data.account) {
+            stopPolling();
+            setDraftAccount({
+              provider_id: providerId,
+              email: data.account.email || "",
+              credential: data.account.credential,
+              auth_method: selectedMethod || "auto",
+            });
+            setStep("confirm-save");
+          }
+        } catch {
+          // Silent fail on network glitch
         }
-        
-        if (data.done && data.account) {
-          stopPolling();
-          setDraftAccount({
-            provider_id: providerId,
-            email: data.account.email || "",
-            credential: data.account.credential,
-            auth_method: selectedMethod || "auto",
-          });
-          setStep("confirm-save");
-        }
-      } catch {
-        // Silent fail on network glitch
-      }
-    }, Math.max(intervalMs, 3000));
+      },
+      Math.max(intervalMs, 3000),
+    );
   };
 
   const stopPolling = () => {
@@ -391,14 +458,14 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
     if (!draftAccount) return;
     setSubmitting(true);
     setError(null);
-    
+
     try {
       const res = await fetch(`${getApiUrl()}/v1/accounts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(draftAccount),
       });
-      
+
       const data: any = await res.json();
       if (data.success) {
         onSuccess();
@@ -421,6 +488,7 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
     else if (step === "select-provider") onClose();
   };
 
+  // ── Handlers ──
   // ─── Input Handling ───────────────────────────────────────────────────
   useInput((input, key) => {
     // Ctrl+C: thoát hoàn toàn khỏi màn hình AddAccount (không quay back từng bước)
@@ -437,22 +505,23 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
 
     if (step === "select-provider") {
       // Absolute-index navigation with automatic scrolling window
-      if (key.upArrow) setCursorIndex(prev => Math.max(0, prev - 1));
-      if (key.downArrow) setCursorIndex(prev => Math.min(providers.length - 1, prev + 1));
-      
+      if (key.upArrow) setCursorIndex((prev) => Math.max(0, prev - 1));
+      if (key.downArrow)
+        setCursorIndex((prev) => Math.min(providers.length - 1, prev + 1));
+
       if (key.return) handleSelectProvider();
-    }
-    else if (step === "select-method") {
+    } else if (step === "select-method") {
       const methods = selectedProvider?.authMethodsList || [];
-      if (key.upArrow) setCursorIndex(prev => Math.max(0, prev - 1));
-      if (key.downArrow) setCursorIndex(prev => Math.min(methods.length - 1, prev + 1));
+      if (key.upArrow) setCursorIndex((prev) => Math.max(0, prev - 1));
+      if (key.downArrow)
+        setCursorIndex((prev) => Math.min(methods.length - 1, prev + 1));
       if (key.return) handleSelectMethod(methods[cursorIndex]);
-    }
-    else if (step === "select-profile") {
+    } else if (step === "select-profile") {
       // Absolute-index navigation with automatic scrolling window
       const totalRows = profileFolders.length + 1;
-      if (key.upArrow) setCursorIndex(prev => Math.max(0, prev - 1));
-      if (key.downArrow) setCursorIndex(prev => Math.min(totalRows - 1, prev + 1));
+      if (key.upArrow) setCursorIndex((prev) => Math.max(0, prev - 1));
+      if (key.downArrow)
+        setCursorIndex((prev) => Math.min(totalRows - 1, prev + 1));
 
       if (key.return && !profilesLoading && !profilesError) {
         if (cursorIndex === 0) {
@@ -462,18 +531,20 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
           if (folder) startLoginFlow(selectedProvider!, selectedMethod, folder);
         }
       }
-    }
-    else if (step === "confirm-save") {
+    } else if (step === "confirm-save") {
       if (key.return) handleConfirmSave();
     }
   });
 
-  // ─── Render Helpers ───────────────────────────────────────────────────
-  
+  // ── Render Helpers ──
   const renderHeader = () => (
     <Box flexDirection="column" marginBottom={1}>
-      <Text bold color="yellow">Add New Account</Text>
-      <Text dimColor>Select a provider and authenticate to save credentials locally.</Text>
+      <Text bold color="yellow">
+        Add New Account
+      </Text>
+      <Text dimColor>
+        Select a provider and authenticate to save credentials locally.
+      </Text>
       {error && (
         <Box marginTop={0.5}>
           <Text color="red">{error}</Text>
@@ -489,16 +560,21 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
     if (step === "select-provider") currentIdx = 0;
     else if (step === "select-method") currentIdx = 1;
     else if (step === "select-profile") currentIdx = 2;
-    else if (step === "initiating-login" || step === "waiting-auth") currentIdx = 3;
+    else if (step === "initiating-login" || step === "waiting-auth")
+      currentIdx = 3;
     else currentIdx = 4; // confirm-save
-      
+
     return (
       <Box marginBottom={1}>
         {steps.map((s, i) => {
           const isActive = i === currentIdx;
           const label = isActive ? `[${s}]` : s;
-          const color = isActive ? "cyanBright" : (i < currentIdx ? "cyan" : "gray");
-          
+          const color = isActive
+            ? "cyanBright"
+            : i < currentIdx
+              ? "cyan"
+              : "gray";
+
           return (
             <React.Fragment key={s}>
               <Text color={color}>{label}</Text>
@@ -514,22 +590,32 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
    * Modern Minimalist Provider Row
    * No borders. Uses background highlight and accent colors for selection.
    */
-  const ProviderRow = ({ provider, isSelected }: { provider: Provider; isSelected: boolean }) => {
+  const ProviderRow = ({
+    provider,
+    isSelected,
+  }: {
+    provider: Provider;
+    isSelected: boolean;
+  }) => {
     const isEnabled = provider.is_enabled !== false;
     const connType = provider.connection_type || "https";
     const connLabel = connType.toUpperCase();
     const methods = provider.authMethodsList;
     const domain = getDomain(provider.website_url || provider.website);
-    
+
     // Colors
     const bgColor = isSelected ? "#1e293b" : undefined; // Slate-800 equivalent dark bg
-    const textColor = isSelected ? "white" : (isEnabled ? "grayLight" : "grayDark");
+    const textColor = isSelected
+      ? "white"
+      : isEnabled
+        ? "grayLight"
+        : "grayDark";
     const markerColor = isSelected ? "cyanBright" : "grayDark";
     const badgeBg = isSelected ? "#0f172a" : "#1e293b";
     const badgeText = connType === "browser" ? "orangeBright" : "greenBright";
 
     return (
-      <Box 
+      <Box
         backgroundColor={bgColor}
         paddingX={1}
         flexDirection="column"
@@ -553,19 +639,18 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
             )}
             {!isEnabled && (
               <Box marginLeft={1}>
-                <Text color="yellow" bold italic>[Disabled]</Text>
+                <Text color="yellow" bold italic>
+                  [Disabled]
+                </Text>
               </Box>
             )}
           </Box>
 
           {/* Right: Connection badge (thay chỗ domain cũ) */}
           <Box flexShrink={0} marginLeft={1}>
-            <Text
-              color={badgeText}
-              backgroundColor={badgeBg}
-              bold
-            >
-              {" "}{connLabel}{" "}
+            <Text color={badgeText} backgroundColor={badgeBg} bold>
+              {" "}
+              {connLabel}{" "}
             </Text>
           </Box>
         </Box>
@@ -584,11 +669,11 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
           <Box paddingLeft={2} marginTop={provider.description ? 0 : 0}>
             {methods.map((m, idx) => (
               <Box key={m} marginRight={1}>
-                <Text 
-                  color={idx === 0 ? "cyan" : "gray"} 
+                <Text
+                  color={idx === 0 ? "cyan" : "gray"}
                   backgroundColor={idx === 0 ? "#002233" : "#1a1a1a"}
                 >
-                   {m}
+                  {m}
                 </Text>
               </Box>
             ))}
@@ -603,8 +688,7 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
     return str.length > maxLen ? str.substring(0, maxLen - 1) + "…" : str;
   }
 
-  // ─── Main Render ──────────────────────────────────────────────────────
-  
+  // ── Render ──
   if (loading) {
     return (
       <Box paddingX={1}>
@@ -617,29 +701,34 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
     <Box flexDirection="column" paddingLeft={1}>
       {renderHeader()}
       {renderBreadcrumb()}
-      
+
       <Box flexDirection="column" minHeight={15}>
-        
         {/* STEP 1: SELECT PROVIDER (Scrolling Window) */}
         {step === "select-provider" && (
           <>
             <Box justifyContent="space-between" marginBottom={1}>
-              <Text bold dimColor>Select a provider:</Text>
-              <Text dimColor>{cursorIndex + 1}/{providers.length}</Text>
+              <Text bold dimColor>
+                Select a provider:
+              </Text>
+              <Text dimColor>
+                {cursorIndex + 1}/{providers.length}
+              </Text>
             </Box>
-            
+
             <Box flexDirection="column">
               {visibleProviders.map((p, idx) => {
                 const absoluteIdx = providerStart + idx;
                 return (
-                  <ProviderRow 
-                    key={p.provider_id} 
-                    provider={p} 
-                    isSelected={absoluteIdx === cursorIndex} 
+                  <ProviderRow
+                    key={p.provider_id}
+                    provider={p}
+                    isSelected={absoluteIdx === cursorIndex}
                   />
                 );
               })}
-              {providers.length === 0 && <Text dimColor>No providers found.</Text>}
+              {providers.length === 0 && (
+                <Text dimColor>No providers found.</Text>
+              )}
             </Box>
           </>
         )}
@@ -647,22 +736,30 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
         {/* STEP 2: SELECT METHOD */}
         {step === "select-method" && selectedProvider && (
           <>
-            <Text bold>Provider: <Text color="cyan">{selectedProvider.provider_name}</Text></Text>
+            <Text bold>
+              Provider:{" "}
+              <Text color="cyan">{selectedProvider.provider_name}</Text>
+            </Text>
             <Box marginTop={1}>
               <Text dimColor>Select authentication method:</Text>
             </Box>
             <Box marginTop={1} flexDirection="column">
-              {(selectedProvider.authMethodsList).map((m, idx) => {
+              {selectedProvider.authMethodsList.map((m, idx) => {
                 const isSelected = idx === cursorIndex;
-                
+
                 // Map descriptions similar to AddAccountDrawer.tsx
                 const getMethodDesc = (method: string): string => {
                   switch (method.toLowerCase()) {
-                    case "google": return "Sign in with your Google account via OAuth";
-                    case "github": return "Sign in with your GitHub account via OAuth";
-                    case "x": return "Sign in via device code — browser will open automatically";
-                    case "basic": return "Enter your email and password directly — no OAuth required";
-                    default: return `Sign in with ${method}`;
+                    case "google":
+                      return "Sign in with your Google account via OAuth";
+                    case "github":
+                      return "Sign in with your GitHub account via OAuth";
+                    case "x":
+                      return "Sign in via device code — browser will open automatically";
+                    case "basic":
+                      return "Enter your email and password directly — no OAuth required";
+                    default:
+                      return `Sign in with ${method}`;
                   }
                 };
 
@@ -672,7 +769,10 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
                       <Text color={isSelected ? "cyanBright" : "gray"}>
                         {isSelected ? "❯ " : "  "}
                       </Text>
-                      <Text color={isSelected ? "white" : "grayLight"} bold={isSelected}>
+                      <Text
+                        color={isSelected ? "white" : "grayLight"}
+                        bold={isSelected}
+                      >
                         {m.toUpperCase()}
                       </Text>
                     </Box>
@@ -692,7 +792,8 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
         {step === "select-profile" && selectedProvider && (
           <>
             <Text bold>
-              Provider: <Text color="cyan">{selectedProvider.provider_name}</Text>
+              Provider:{" "}
+              <Text color="cyan">{selectedProvider.provider_name}</Text>
               <Text dimColor> · Method: </Text>
               <Text color="magenta">{selectedMethod.toUpperCase()}</Text>
             </Text>
@@ -712,166 +813,206 @@ export function AddAccount({ onClose, onSuccess }: AddAccountProps): React.JSX.E
               </Box>
             )}
 
-            {!profilesLoading && !profilesError && (() => {
-              const totalRows = profileFolders.length + 1; // row 0 = No profile
+            {!profilesLoading &&
+              !profilesError &&
+              (() => {
+                const totalRows = profileFolders.length + 1; // row 0 = No profile
 
-              // Scrolling window calculation
-              let profileStart = 0;
-              if (totalRows > PAGE_SIZE_PROFILES) {
-                const half = Math.floor(PAGE_SIZE_PROFILES / 2);
-                profileStart = cursorIndex - half;
-                if (profileStart < 0) profileStart = 0;
-                if (profileStart + PAGE_SIZE_PROFILES > totalRows) {
-                  profileStart = Math.max(0, totalRows - PAGE_SIZE_PROFILES);
+                // Scrolling window calculation
+                let profileStart = 0;
+                if (totalRows > PAGE_SIZE_PROFILES) {
+                  const half = Math.floor(PAGE_SIZE_PROFILES / 2);
+                  profileStart = cursorIndex - half;
+                  if (profileStart < 0) profileStart = 0;
+                  if (profileStart + PAGE_SIZE_PROFILES > totalRows) {
+                    profileStart = Math.max(0, totalRows - PAGE_SIZE_PROFILES);
+                  }
                 }
-              }
-              const visibleCount = Math.min(PAGE_SIZE_PROFILES, totalRows - profileStart);
-              const parent = profileBaseDir.split(/[\\/]+/).filter(Boolean).pop();
+                const visibleCount = Math.min(
+                  PAGE_SIZE_PROFILES,
+                  totalRows - profileStart,
+                );
+                const parent = profileBaseDir
+                  .split(/[\\/]+/)
+                  .filter(Boolean)
+                  .pop();
 
-              return (
-                <>
-                  <Box justifyContent="space-between" marginTop={1}>
-                    <Text dimColor>{profileBaseDir || "(no base dir)"}</Text>
-                    <Text dimColor>{cursorIndex + 1}/{totalRows}</Text>
-                  </Box>
+                return (
+                  <>
+                    <Box justifyContent="space-between" marginTop={1}>
+                      <Text dimColor>{profileBaseDir || "(no base dir)"}</Text>
+                      <Text dimColor>
+                        {cursorIndex + 1}/{totalRows}
+                      </Text>
+                    </Box>
 
-                  <Box flexDirection="column" marginTop={1}>
-                    {Array.from({ length: visibleCount }).map((_, idx) => {
-                      const absoluteIdx = profileStart + idx;
-                      const isSelected = absoluteIdx === cursorIndex;
-                      const isNoProfile = absoluteIdx === 0;
-                      const folder = isNoProfile ? undefined : profileFolders[absoluteIdx - 1];
+                    <Box flexDirection="column" marginTop={1}>
+                      {Array.from({ length: visibleCount }).map((_, idx) => {
+                        const absoluteIdx = profileStart + idx;
+                        const isSelected = absoluteIdx === cursorIndex;
+                        const isNoProfile = absoluteIdx === 0;
+                        const folder = isNoProfile
+                          ? undefined
+                          : profileFolders[absoluteIdx - 1];
 
-                      return (
-                        <Box key={absoluteIdx} backgroundColor={isSelected ? "#1e293b" : undefined} paddingX={1} flexDirection="column">
-                          <Box flexDirection="row" alignItems="center">
-                            <Text color={isSelected ? "cyanBright" : "grayDark"}>
-                              {isSelected ? "❯ " : "  "}
-                            </Text>
-                            <Text color={isSelected ? "white" : "grayLight"} bold={isSelected}>
-                              {isNoProfile ? "⊘  No profile" : folder}
-                            </Text>
+                        return (
+                          <Box
+                            key={absoluteIdx}
+                            backgroundColor={isSelected ? "#1e293b" : undefined}
+                            paddingX={1}
+                            flexDirection="column"
+                          >
+                            <Box flexDirection="row" alignItems="center">
+                              <Text
+                                color={isSelected ? "cyanBright" : "grayDark"}
+                              >
+                                {isSelected ? "❯ " : "  "}
+                              </Text>
+                              <Text
+                                color={isSelected ? "white" : "grayLight"}
+                                bold={isSelected}
+                              >
+                                {isNoProfile ? "⊘  No profile" : folder}
+                              </Text>
+                            </Box>
+                            <Box paddingLeft={2}>
+                              <Text dimColor wrap="truncate">
+                                {isNoProfile
+                                  ? "Login as default with a fresh browser window"
+                                  : parent
+                                    ? `…/${parent}/${folder}`
+                                    : `…/${folder}`}
+                              </Text>
+                            </Box>
                           </Box>
-                          <Box paddingLeft={2}>
-                            <Text dimColor wrap="truncate">
-                              {isNoProfile
-                                ? "Login as default with a fresh browser window"
-                                : parent ? `…/${parent}/${folder}` : `…/${folder}`}
-                            </Text>
-                          </Box>
+                        );
+                      })}
+                      {profileFolders.length === 0 && (
+                        <Box paddingLeft={2}>
+                          <Text dimColor italic>
+                            No profiles found in this directory.
+                          </Text>
                         </Box>
-                      );
-                    })}
-                    {profileFolders.length === 0 && (
-                      <Box paddingLeft={2}>
-                        <Text dimColor italic>No profiles found in this directory.</Text>
-                      </Box>
-                    )}
-                  </Box>
-                </>
-              );
-            })()}
+                      )}
+                    </Box>
+                  </>
+                );
+              })()}
           </>
         )}
 
         {/* STEP 3: WAITING FOR AUTH (Device Code) */}
         {step === "waiting-auth" && pendingLogin && (
           <Box flexDirection="column" alignItems="center" marginTop={2}>
-            <Text bold color="yellow">Waiting for authorization...</Text>
-            
-            <Box marginTop={1} borderStyle="single" borderColor="cyan" paddingX={2} paddingY={1}>
+            <Text bold color="yellow">
+              Waiting for authorization...
+            </Text>
+
+            <Box
+              marginTop={1}
+              borderStyle="single"
+              borderColor="cyan"
+              paddingX={2}
+              paddingY={1}
+            >
               <Text bold color="cyanBright">
                 {pendingLogin.user_code}
               </Text>
             </Box>
-            
+
             <Box marginTop={1}>
               <Text dimColor>Please visit this URL in your browser:</Text>
             </Box>
             <Box marginTop={1}>
-               <Text color="blueUnderline">
-                 {pendingLogin.verification_url}
-               </Text>
+              <Text color="blueUnderline">{pendingLogin.verification_url}</Text>
             </Box>
-            
+
             <Box marginTop={2}>
-              <Text dimColor italic>Press Esc to cancel</Text>
+              <Text dimColor italic>
+                Press Esc to cancel
+              </Text>
             </Box>
           </Box>
         )}
 
         {/* STEP 4: CONFIRM SAVE */}
-        {step === "confirm-save" && draftAccount && (() => {
-          // Attempt to parse credential as JSON to display fields individually
-          let credFields: Record<string, string> = {};
-          try {
-            const parsed = JSON.parse(draftAccount.credential);
-            if (parsed && typeof parsed === 'object') {
-              credFields = Object.entries(parsed).reduce((acc, [k, v]) => {
-                acc[k] = String(v);
-                return acc;
-              }, {} as Record<string, string>);
+        {step === "confirm-save" &&
+          draftAccount &&
+          (() => {
+            // Attempt to parse credential as JSON to display fields individually
+            let credFields: Record<string, string> = {};
+            try {
+              const parsed = JSON.parse(draftAccount.credential);
+              if (parsed && typeof parsed === "object") {
+                credFields = Object.entries(parsed).reduce(
+                  (acc, [k, v]) => {
+                    acc[k] = String(v);
+                    return acc;
+                  },
+                  {} as Record<string, string>,
+                );
+              }
+            } catch {
+              // Not valid JSON, treat whole string as one field
+              credFields["value"] = draftAccount.credential;
             }
-          } catch {
-            // Not valid JSON, treat whole string as one field
-            credFields["value"] = draftAccount.credential;
-          }
 
-          return (
-            <Box flexDirection="column">
-              <Text bold color="greenBright">Success! Account details captured.</Text>
-              
-              <Box marginTop={1} flexDirection="column" paddingLeft={2}>
-                <Box>
-                  <Box width={12}>
-                    <Text dimColor>Provider: </Text>
-                  </Box>
-                  <Text>{draftAccount.provider_id}</Text>
-                </Box>
-                <Box>
-                  <Box width={12}>
-                    <Text dimColor>Email: </Text>
-                  </Box>
-                  <Text>{draftAccount.email || "(empty)"}</Text>
-                </Box>
-                <Box>
-                  <Box width={12}>
-                    <Text dimColor>Method: </Text>
-                  </Box>
-                  <Text>{draftAccount.auth_method}</Text>
-                </Box>
-                
-                <Box flexDirection="column">
-                  <Text dimColor>Credentials:</Text>
-                  {Object.entries(credFields).map(([key, val]) => (
-                    <Box key={key} paddingLeft={2}>
-                      <Box width={16}>
-                        <Text color="cyan">{key}: </Text>
-                      </Box>
-                      <Text color="magenta">
-                        {val.length > 25 ? val.substring(0, 22) + "..." : val}
-                      </Text>
+            return (
+              <Box flexDirection="column">
+                <Text bold color="greenBright">
+                  Success! Account details captured.
+                </Text>
+
+                <Box marginTop={1} flexDirection="column" paddingLeft={2}>
+                  <Box>
+                    <Box width={12}>
+                      <Text dimColor>Provider: </Text>
                     </Box>
-                  ))}
+                    <Text>{draftAccount.provider_id}</Text>
+                  </Box>
+                  <Box>
+                    <Box width={12}>
+                      <Text dimColor>Email: </Text>
+                    </Box>
+                    <Text>{draftAccount.email || "(empty)"}</Text>
+                  </Box>
+                  <Box>
+                    <Box width={12}>
+                      <Text dimColor>Method: </Text>
+                    </Box>
+                    <Text>{draftAccount.auth_method}</Text>
+                  </Box>
+
+                  <Box flexDirection="column">
+                    <Text dimColor>Credentials:</Text>
+                    {Object.entries(credFields).map(([key, val]) => (
+                      <Box key={key} paddingLeft={2}>
+                        <Box width={16}>
+                          <Text color="cyan">{key}: </Text>
+                        </Box>
+                        <Text color="magenta">
+                          {val.length > 25 ? val.substring(0, 22) + "..." : val}
+                        </Text>
+                      </Box>
+                    ))}
+                  </Box>
                 </Box>
+
+                {submitting && (
+                  <Box marginTop={1}>
+                    <Text color="yellow">Saving to database...</Text>
+                  </Box>
+                )}
               </Box>
-              
-              {submitting && (
-                <Box marginTop={1}>
-                  <Text color="yellow">Saving to database...</Text>
-                </Box>
-              )}
-            </Box>
-          );
-        })()}
-        
+            );
+          })()}
+
         {/* LOADING STATE */}
         {step === "initiating-login" && (
           <Box marginTop={2}>
-             <Text dimColor>Contacting server...</Text>
+            <Text dimColor>Contacting server...</Text>
           </Box>
         )}
-
       </Box>
 
       {/* Footer Help — động theo step hiện tại */}

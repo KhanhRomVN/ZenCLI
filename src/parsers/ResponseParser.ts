@@ -6,34 +6,34 @@
  * - All parsers are pure Node.js, no DOM dependency
  */
 
-import { parseToolAction } from "../utils/ToolParser";
-import { getAllToolTypes } from "../constants/tag-registry";
-import { findClosingTagPosition } from "../utils/TagClosingFinder";
-import type { TagType } from "../types/tag-types";
-import type { Question } from "../types/message";
+import { parseToolAction } from "../utils/ToolParser.js";
+import { getAllToolTypes } from "../constants/tag-registry.js";
+import { findClosingTagPosition } from "../utils/TagClosingFinder.js";
+import type { TagType } from "../types/tag-types.js";
+import type { Question } from "../types/message.js";
 
 // Tag parsers
-import { parseReadFile } from "./tools/ReadFileParser";
-import { parseWriteToFile } from "./tools/WriteToFileParser";
-import { parseReplaceInFile } from "./tools/ReplaceInFileParser";
-import { parseListFiles } from "./tools/ListFilesParser";
-import { parseFindFiles } from "./tools/FindFilesParser";
-import { parseGrep } from "./tools/GrepParser";
-import { parseDeleteFile } from "./tools/DeleteFileParser";
-import { parseRevertFile } from "./tools/RevertFileParser";
-import { parseViewReplaceHistory } from "./tools/ViewReplaceHistoryParser";
-import { parseRunCommand } from "./tools/RunCommandParser";
-import { parseGitStatus } from "./tools/GitStatusParser";
-import { parseGitDiff } from "./tools/GitDiffParser";
-import { parseCommitMessage } from "./tools/CommitMessageParser";
-import { parseMarkdown } from "./tools/MarkdownParser";
-import { parseQuestion } from "./tools/QuestionParser";
-import { parseConversationTitle } from "./tools/ConversationTitleParser";
-import { parseSearchSkill } from "./tools/SearchSkillParser";
-import { parseListSkill } from "./tools/ListSkillParser";
-import { parseReadSkill } from "./tools/ReadSkillParser";
-import { parseInstallSkill } from "./tools/InstallSkillParser";
-import { parseThinking } from "./tools/ThinkingParser";
+import { parseReadFile } from "./tools/ReadFileParser.js";
+import { parseWriteToFile } from "./tools/WriteToFileParser.js";
+import { parseReplaceInFile } from "./tools/ReplaceInFileParser.js";
+import { parseListFiles } from "./tools/ListFilesParser.js";
+import { parseFindFiles } from "./tools/FindFilesParser.js";
+import { parseGrep } from "./tools/GrepParser.js";
+import { parseDeleteFile } from "./tools/DeleteFileParser.js";
+import { parseRevertFile } from "./tools/RevertFileParser.js";
+import { parseViewReplaceHistory } from "./tools/ViewReplaceHistoryParser.js";
+import { parseRunCommand } from "./tools/RunCommandParser.js";
+import { parseGitStatus } from "./tools/GitStatusParser.js";
+import { parseGitDiff } from "./tools/GitDiffParser.js";
+import { parseCommitMessage } from "./tools/CommitMessageParser.js";
+import { parseMarkdown } from "./tools/MarkdownParser.js";
+import { parseQuestion } from "./tools/QuestionParser.js";
+import { parseConversationTitle } from "./tools/ConversationTitleParser.js";
+import { parseSearchSkill } from "./tools/SearchSkillParser.js";
+import { parseListSkill } from "./tools/ListSkillParser.js";
+import { parseReadSkill } from "./tools/ReadSkillParser.js";
+import { parseInstallSkill } from "./tools/InstallSkillParser.js";
+import { parseThinking } from "./tools/ThinkingParser.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 

@@ -1,9 +1,35 @@
+/**
+ * ------------------------------------------------------------------
+ * Welcome Section
+ * ------------------------------------------------------------------
+ * Màn hình chào mừng hiển thị khi chưa có tin nhắn nào trong phiên chat.
+ * Bao gồm logo ASCII, thông tin phiên bản, đường dẫn dự án, thống kê sử dụng
+ * và hướng dẫn cài đặt backend nếu cần thiết.
+ *
+ * Main features:
+ * - Hiển thị logo ASCII nghệ thuật của ZenCLI
+ * - Thông tin phiên bản tự động đọc từ package.json
+ * - Thống kê token/request/model yêu thích từ API backend
+ * - Hướng dẫn cài đặt AIWeb2API và VSCode Extension nếu thiếu
+ * - Tối ưu hóa render bằng React.memo để tránh flicker khi resize terminal
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── React ──
 import React, { useState, useEffect } from "react";
+
+// ── UI ─
 import { Box, Text, useStdout } from "ink";
+
+// ── Node FS ──
 import { readFileSync } from "fs";
 import { resolve } from "path";
+
+// ── Services ──
 import { fetchStats, type StatsResponse } from "../services/api.js";
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const pkgVersion: string = (() => {
   try {
     const pkgPath = resolve(__dirname, "../../../package.json");
@@ -13,13 +39,7 @@ const pkgVersion: string = (() => {
   }
 })();
 
-interface WelcomeSectionProps {
-  providerName: string;
-  modelName: string;
-  email: string;
-  workspacePath: string;
-}
-
+// ─── Helpers ────────────────────────────────────────────────────────────
 // Helper format numbers like in Analytic.tsx
 function formatNumber(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return "0";
@@ -28,7 +48,13 @@ function formatNumber(n: number | null | undefined): string {
   return String(Math.round(n));
 }
 
-// ─── Installation Hint Component ────────────────────────────────────────
+// ─── Sub-Components ─────────────────────────────────────────────────────
+/**
+ * InstallationHint
+ * ------------------------------------------------------------------
+ * Hộp thoại gợi ý cài đặt khi backend chưa sẵn sàng hoặc đề xuất mở rộng VSCode.
+ * Tự động điều chỉnh chiều rộng dựa trên kích thước terminal.
+ */
 const InstallationHint = () => {
   const { stdout } = useStdout();
   // Subtract 2 chars to account for potential rendering quirks or implicit margins
@@ -80,10 +106,20 @@ const InstallationHint = () => {
   );
 };
 
+// ─── Interfaces ────────────────────────────────────────────────────────
+interface WelcomeSectionProps {
+  providerName: string;
+  modelName: string;
+  email: string;
+  workspacePath: string;
+}
+
+// ─── Component ─────────────────────────────────────────────────────────
 /**
- * ASCII art welcome banner displayed when no messages exist.
- * Wrapped in React.memo to prevent unnecessary re-renders during terminal resize events,
- * which causes visual artifacts (stacking/duplication) in Ink TUIs if the component tree updates too frequently.
+ * WelcomeSection
+ * ------------------------------------------------------------------
+ * Component chính hiển thị màn hình chào mừng.
+ * Được bọc trong React.memo để tối ưu hiệu suất khi terminal thay đổi kích thước.
  */
 export const WelcomeSection = React.memo(function WelcomeSection({
   providerName,
@@ -91,12 +127,14 @@ export const WelcomeSection = React.memo(function WelcomeSection({
   email,
   workspacePath,
 }: WelcomeSectionProps): React.JSX.Element {
+  // ── State ──
   const [stats, setStats] = useState<{
     totalTokens: number;
     totalRequests: number;
     favoriteModel: string;
   } | null>(null);
 
+  // ── Effects ──
   useEffect(() => {
     fetchStats("day")
       .then((data: StatsResponse | null) => {
@@ -125,6 +163,7 @@ export const WelcomeSection = React.memo(function WelcomeSection({
       });
   }, []);
 
+  // ── Derived ─
   const hasSelection = modelName !== "-";
   const displayEmail = email !== "-" ? email : "";
   const line2 = hasSelection
@@ -147,6 +186,7 @@ export const WelcomeSection = React.memo(function WelcomeSection({
     statsLine = "Loading stats...";
   }
 
+  // ── Render ──
   return (
     <Box flexDirection="column" paddingX={1} marginBottom={1}>
       <Text>

@@ -1,6 +1,6 @@
 {
   "name": "@khanhromvn/zencli",
-  "version": "1.0.7",
+  "version": "1.1.1",
   "description": "AI-powered coding CLI tool — companion to the Zen VSCode extension (https://github.com/KhanhRomVN/Zen)",
   "keywords": [
     "cli",
@@ -33,11 +33,11 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/fix-esm-imports.mjs",
     "dev": "node scripts/clear-log.mjs && tsx src/cli.tsx",
     "start": "tsx src/cli.tsx",
     "lint": "eslint src",
-    "test": "echo \"No tests yet\" && exit 0"
+    "link": "rm -rf ~/.npm-global/lib/node_modules/@khanhromvn/zencli && rm -f ~/.npm-global/bin/zen-cli && npm run build && npm link"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -66,6 +66,6 @@
     "@types/react": "^19.3.0",
     "bun-types": "^1.4.2",
     "tsx": "^4.23.15",
-    "typescript": "^5.8.2"
+    "typescript": "^5.9.3"
   }
 }

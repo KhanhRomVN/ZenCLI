@@ -1,5 +1,21 @@
-import type { Question, QuestionType } from "../../types/message";
+/**
+ * ------------------------------------------------------------------
+ * Question Parser
+ * ------------------------------------------------------------------
+ * Phân tích cấu trúc câu hỏi tương tác (<question>) từ output AI.
+ * Hỗ trợ song song định dạng cũ (danh sách lựa chọn phẳng) và định dạng mới
+ * (mảng câu hỏi chi tiết với thuộc tính type/id/label).
+ *
+ * Main functions:
+ * - parseQuestion() : Trả về object chứa danh sách Question hoặc Options tùy theo format
+ * ------------------------------------------------------------------
+ */
 
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Types ─
+import type { Question, QuestionType } from "../../types/message.js";
+
+// ─── Helpers ───────────────────────────────────────────────────────────
 /** Decode common HTML entities without relying on DOM APIs. */
 function decodeHtmlEntities(text: string): string {
   return text
@@ -15,6 +31,7 @@ function decodeHtmlEntities(text: string): string {
     );
 }
 
+// ─── Functions ──────────────────────────────────────────────────────────
 /**
  * Parse question tag content into structured question data.
  * Supports both legacy (options array) and new (questions array with <q> elements) formats.

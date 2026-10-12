@@ -1,15 +1,45 @@
+/**
+ * ------------------------------------------------------------------
+ * Analytic Dashboard
+ * ------------------------------------------------------------------
+ * Giao diện hiển thị thống kê sử dụng tài nguyên trong phiên chat hiện tại.
+ * Lấy dữ liệu từ Backend API hoặc tính toán cục bộ (local fallback) nếu mất kết nối.
+ *
+ * Main features:
+ * - Hiển thị tổng Token, Số Request, Trung bình Token/Request
+ * - Biểu đồ phân bổ mức độ sử dụng theo từng Model (ASCII Bar Chart)
+ * - Tự động chuyển sang chế độ Local Fallback khi API lỗi
+ * - Hỗ trợ đóng bằng Esc/Ctrl+C
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── React ─
 import React, { useEffect, useState } from "react";
+
+// ── UI ──
 import { Box, Text, useInput } from "ink";
+
+// ── Types ──
 import type { Message } from "../types/message";
+
+// ── Services ──
 import { logToFile, fetchStats, type StatsResponse } from "../services/api";
 
+// ─── Interfaces ────────────────────────────────────────────────────────
 interface AnalyticProps {
   messages: Message[];
   onClose: () => void;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────
+interface ModelStat {
+  key: string;
+  label: string;
+  requests: number;
+  tokens: number;
+}
 
+// ─── Helpers ────────────────────────────────────────────────────────────
 function formatNumber(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return "0";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -21,13 +51,6 @@ function formatNumber(n: number | null | undefined): string {
 function estimateTokens(text: string): number {
   if (!text) return 0;
   return Math.ceil(text.length / 4);
-}
-
-interface ModelStat {
-  key: string;
-  label: string;
-  requests: number;
-  tokens: number;
 }
 
 /** Fallback logic: Tính toán từ local messages nếu API fail */
@@ -70,16 +93,17 @@ function renderBar(percent: number, width: number = 20): string {
   return "█".repeat(filled) + "░".repeat(empty);
 }
 
-// ─── Component ──────────────────────────────────────────────────────
-
+// ─── Component ──────────────────────────────────────────────────────────
 export function Analytic({
   messages,
   onClose,
 }: AnalyticProps): React.JSX.Element {
+  // ── State ──
   const [statsData, setStatsData] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Effects ──
   // Fetch stats from backend API on mount
   useEffect(() => {
     setLoading(true);
@@ -115,8 +139,7 @@ export function Analytic({
     { isActive: true },
   );
 
-  // ── Data Derivation ──
-
+  // ── Derived ──
   let totalRequests = 0;
   let totalTokens = 0;
   let avgTokensPerReq = 0;

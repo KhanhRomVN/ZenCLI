@@ -1,5 +1,20 @@
-import { extractParamValue } from "../../utils/ToolParser";
+/**
+ * ------------------------------------------------------------------
+ * Write To File Parser
+ * ------------------------------------------------------------------
+ * Phân tích tham số cho lệnh ghi mới file (`write_to_file`).
+ * Kiểm tra tính toàn vẹn của cấu trúc XML (thẻ đóng/mở) và sự hiện diện của dữ liệu bắt buộc.
+ *
+ * Main functions:
+ * - parseWriteToFile() : Trả về WriteToFileParams kèm trạng thái lỗi nếu phát hiện sai cú pháp
+ * ------------------------------------------------------------------
+ */
 
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Utils 
+import { extractParamValue } from "../../utils/ToolParser.js";
+
+// ─── Types & Interfaces ────────────────────────────────────────────────
 export interface WriteToFileParams {
   file_path: string;
   content: string;
@@ -7,6 +22,7 @@ export interface WriteToFileParams {
   original_tool_name?: string;
 }
 
+// ─── Helpers ────────────────────────────────────────────────────────────
 /**
  * Helper function to detect missing closing tag
  */
@@ -34,6 +50,7 @@ const detectMissingClosingTag = (
   return null;
 };
 
+// ─── Functions ──────────────────────────────────────────────────────────
 export const parseWriteToFile = (
   innerContent: string,
 ): WriteToFileParams & { isError?: boolean; errorMessage?: string } => {

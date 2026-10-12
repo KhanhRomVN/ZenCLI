@@ -1,24 +1,47 @@
+/**
+ * ------------------------------------------------------------------
+ * Chat Interface Orchestrator
+ * ------------------------------------------------------------------
+ * Thành phần cốt lõi của giao diện dòng lệnh, chịu trách nhiệm hiển thị lịch sử trò chuyện,
+ * điều phối các panel lệnh (/model-account, /settings, ...) và render kết quả thực thi tool.
+ *
+ * Main features:
+ * - Quản lý trạng thái phiên chat (messages, streaming, context usage)
+ * - Điều hướng và mở/đóng các modal/command panel nội tuyến
+ * - Render trực quan hóa kết quả tool call (Read, Write, Bash...)
+ * - Hỗ trợ phím tắt tương tác trong header khi chưa có tin nhắn
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── React 
 import React, { useEffect, useCallback, useRef, useState } from "react";
+
+// ── UI ─
 import { Box, Text, useInput, useStdout } from "ink";
-import { useChat } from "../hooks/useChat";
-import type { RuntimeFlags } from "../services/ChatService";
-import { ModelAccount } from "./ModelAccount";
-import { History } from "./History";
-import { Settings } from "./Settings";
+
+// ── Hooks ──
+import { useChat } from "../hooks/useChat.js";
+
+// ── Services ──
+import type { RuntimeFlags } from "../services/ChatService.js";
+import { saveSelection, loadSelection } from "../services/selectionStorage.js";
+import { getApiUrl } from "../services/api.js";
+import { logToFile } from "../services/logger.js";
+
+// ── Components (Panels) ──
+import { ModelAccount } from "./ModelAccount.js";
+import { History } from "./History.js";
+import { Settings } from "./Settings.js";
 import { Account } from "./Account.js";
 import { AddAccount } from "./AddAccount.js";
-import { PromptConfig } from "./PromptConfig";
-import { Analytic } from "./Analytic";
-import { Skill } from "./Skill";
-import { AddSkill } from "./AddSkill";
-import { ImportAccount } from "./ImportAccount";
-import { saveSelection, loadSelection } from "../services/selectionStorage";
-import { getApiUrl, logToFile } from "../services/api";
+import { PromptConfig } from "./PromptConfig.js";
+import { Analytic } from "./Analytic.js";
+import { Skill } from "./Skill.js";
+import { AddSkill } from "./AddSkill.js";
+import { ImportAccount } from "./ImportAccount.js";
 
-// ============================================================================
-// TOOL RENDERER TYPES & LOGIC (Merged from ToolRenderer.tsx)
-// ============================================================================
-
+// ─── Types & Interfaces (Tool Renderer) ────────────────────────────────
 export interface ToolAction {
   type: string;
   params: Record<string, any>;
@@ -37,6 +60,7 @@ export interface ToolRendererProps {
   toolOutputs?: Record<string, ToolOutput>;
 }
 
+// ─── Constants (Tool Labels) ───────────────────────────────────────────
 const TOOL_LABELS: Record<string, string> = {
   read_file: "Read",
   write_to_file: "Write",
@@ -57,13 +81,25 @@ const TOOL_LABELS: Record<string, string> = {
   install_skill: "InstallSkill",
 };
 
+// ─── Helpers (Tool Summary Builders) ───────────────────────────────────
 function getToolLabel(type: string): string {
   return TOOL_LABELS[type] || type;
 }
 
-function buildReadSummary(_params: Record<string, any>, output?: ToolOutput): string {
-  if (output && !output.isError && typeof output.output === "string" && output.output.length > 0) {
-    const lineCount = output.output.split(/\r?\n/).filter((l) => l.trim().length > 0).length;
+// ─── Helpers (Tool Summary Builders) ───────────────────────────────────
+function buildReadSummary(
+  _params: Record<string, any>,
+  output?: ToolOutput,
+): string {
+  if (
+    output &&
+    !output.isError &&
+    typeof output.output === "string" &&
+    output.output.length > 0
+  ) {
+    const lineCount = output.output
+      .split(/\r?\n/)
+      .filter((l) => l.trim().length > 0).length;
     return `Read ${lineCount} lines`;
   }
   return "Reading file...";
@@ -86,41 +122,60 @@ function buildDeleteSummary(params: Record<string, any>): string {
   return `Delete ${filePath}`;
 }
 
-function buildListFilesSummary(params: Record<string, any>, output?: ToolOutput): string {
+function buildListFilesSummary(
+  params: Record<string, any>,
+  output?: ToolOutput,
+): string {
   const folderPath = params.folder_path || params.path || ".";
   if (output && !output.isError && output.output) {
-    const entryCount = output.output.split("\n").filter((l: string) => l.trim()).length;
+    const entryCount = output.output
+      .split("\n")
+      .filter((l: string) => l.trim()).length;
     return `Listed ${entryCount} entries in ${folderPath}`;
   }
   return `List ${folderPath}`;
 }
 
-function buildFindFilesSummary(params: Record<string, any>, output?: ToolOutput): string {
+function buildFindFilesSummary(
+  params: Record<string, any>,
+  output?: ToolOutput,
+): string {
   const fileName = params.file_name || params.pattern || "";
   const folderPath = params.folder_path || "";
   const scope = folderPath ? ` in ${folderPath}` : "";
   if (output && !output.isError && output.output) {
-    const matchCount = output.output.split("\n").filter((l: string) => l.trim()).length;
+    const matchCount = output.output
+      .split("\n")
+      .filter((l: string) => l.trim()).length;
     return `Found ${matchCount} files matching "${fileName}"${scope}`;
   }
   return `Find "${fileName}"${scope}`;
 }
 
-function buildGrepSummary(params: Record<string, any>, output?: ToolOutput): string {
+function buildGrepSummary(
+  params: Record<string, any>,
+  output?: ToolOutput,
+): string {
   const searchTerm = params.search_term || params.searchTerm || "";
   const folderPath = params.folder_path || params.folderPath || "";
   const filePath = params.file_path || params.filePath || "";
   const scope = folderPath || filePath || "";
   if (output && !output.isError && output.output) {
-    const matchLines = output.output.split("\n").filter((l: string) => l.trim());
+    const matchLines = output.output
+      .split("\n")
+      .filter((l: string) => l.trim());
     return `Found ${matchLines.length} matches for "${searchTerm}" in ${scope}`;
   }
   return `Grep "${searchTerm}" in ${scope}`;
 }
 
-function buildRunCommandSummary(params: Record<string, any>, output?: ToolOutput): string {
+function buildRunCommandSummary(
+  params: Record<string, any>,
+  output?: ToolOutput,
+): string {
   const command = params.command || "";
-  const truncated = command.length > 60 ? command.slice(0, 57) + "..." : command;
+  const truncated =
+    command.length > 60 ? command.slice(0, 57) + "..." : command;
   if (output) {
     const status = output.isError ? "failed" : "done";
     return `Run "${truncated}" (${status})`;
@@ -139,9 +194,14 @@ function buildViewReplaceHistorySummary(params: Record<string, any>): string {
   return `View replace history of ${filePath}`;
 }
 
-function buildGitStatusSummary(_params: Record<string, any>, output?: ToolOutput): string {
+function buildGitStatusSummary(
+  _params: Record<string, any>,
+  output?: ToolOutput,
+): string {
   if (output && !output.isError && output.output) {
-    const changedFiles = output.output.split("\n").filter((l: string) => l.trim()).length;
+    const changedFiles = output.output
+      .split("\n")
+      .filter((l: string) => l.trim()).length;
     return `Git status: ${changedFiles} changed files`;
   }
   return "Git status";
@@ -201,8 +261,12 @@ function buildSummary(action: ToolAction, output?: ToolOutput): string {
   }
 }
 
+// ─── Sub-Components (Tool Renderer) ─────────────────────────────────────
 /**
- * Unified TUI renderer for all tool actions.
+ * ToolRenderer
+ * ------------------------------------------------------------------
+ * Thành phần con hiển thị kết quả thực thi tool call dưới dạng tóm tắt ngắn gọn.
+ * Hỗ trợ màu sắc trạng thái (Xanh: thành công, Vàng: đang chạy/lỗi nhẹ, Đỏ: lỗi nghiêm trọng).
  */
 function ToolRenderer({
   action,
@@ -238,9 +302,7 @@ function ToolRenderer({
         <Text bold color="white">
           {label}
         </Text>
-        {primaryParam ? (
-          <Text dimColor>({primaryParam})</Text>
-        ) : null}
+        {primaryParam ? <Text dimColor>({primaryParam})</Text> : null}
       </Box>
 
       <Box paddingLeft={2}>
@@ -253,17 +315,16 @@ function ToolRenderer({
   );
 }
 
-// ============================================================================
-// COMMAND PANEL LOGIC (Merged from CommandPanel.tsx)
-// ============================================================================
-
+// ─── Sub-Components (Command Panel Wrapper) ─────────────────────────────
 interface CommandPanelProps {
   isOpen: boolean;
   children: React.ReactNode;
 }
 
 /**
- * A reusable wrapper for CLI command panels that mimics the ModelAccount UX.
+ * CommandPanel
+ * ------------------------------------------------------------------
+ * Khung bao chung cho các modal lệnh nội tuyến, tạo viền ngăn cách với luồng chat chính.
  */
 function CommandPanel({
   isOpen,
@@ -287,11 +348,8 @@ function CommandPanel({
   );
 }
 
-// ============================================================================
-// CHAT COMPONENT LOGIC
-// ============================================================================
-
-// ─── Spinner icon cycle (standard braille dots animation, U+2800 block) ──
+// ─── Constants & Helpers (Chat Specific) ────────────────────────────────
+// Spinner icon cycle (standard braille dots animation, U+2800 block)
 const SPINNER_FRAMES = [
   "\u280B", // ⠋
   "\u2819", // ⠙
@@ -306,7 +364,9 @@ const SPINNER_FRAMES = [
 ];
 
 /**
- * Live elapsed-time indicator shown while waiting for an AI response.
+ * GeneratingIndicator
+ * ------------------------------------------------------------------
+ * Chỉ báo thời gian chờ phản hồi từ AI, cập nhật mỗi giây kèm hiệu ứng xoay vòng.
  */
 function GeneratingIndicator({
   active,
@@ -345,8 +405,9 @@ function GeneratingIndicator({
 }
 
 /**
- * Strip the CLI prompt wrapper from a user message so the UI shows only
- * the raw text the user typed, not `## User Message\n<user-message>...`.
+ * extractUserVisibleContent
+ * ------------------------------------------------------------------
+ * Loại bỏ các thẻ XML wrapper để chỉ hiển thị nội dung thuần túy người dùng đã nhập.
  */
 function extractUserVisibleContent(raw: string): string {
   const match = /<user-message>\s*([\s\S]*?)\s*<\/user-message>/i.exec(raw);
@@ -354,11 +415,13 @@ function extractUserVisibleContent(raw: string): string {
   return raw.replace(/^##\s*User Message\s*/i, "").trim();
 }
 
+// ─── Interfaces (Chat Props) ────??───────────────────────────────────────
 interface ChatProps {
   isActive: boolean;
   onHandlersReady?: (handlers: {
     handleSubmit: (value: string) => void;
-    handleLoadConversation: (conversationId: string) => void;
+    /** Load conversation by ID. Returns true if successful, false otherwise. */
+    handleLoadConversation: (conversationId: string) => Promise<boolean>;
     handleModelSelect: (selection: {
       providerId: string;
       modelId: string;
@@ -388,16 +451,7 @@ interface ChatProps {
   onToggleSkill: () => void;
 }
 
-/**
- * Main chat panel — displays welcome banner and message list.
- * Uses ChatService via useChat hook for all business logic.
- *
- * TextInput is NOT here — it lives in App.tsx.
- * This component only renders the content area above the input.
- *
- * /model-account renders as an inline interactive panel within the
- * message list, styled like ToolRenderer output.
- */
+// ─── Component (Main Chat Orchestrator) ─────────────────────────────────
 export function Chat({
   isActive,
   onHandlersReady,
@@ -412,6 +466,7 @@ export function Chat({
   onSetCodeStyle,
   onToggleSkill,
 }: ChatProps): React.JSX.Element {
+  // ── State ──
   const workspacePath = process.cwd();
 
   const { messages, sendMessage, resetSession, chatService, isStreaming } =
@@ -443,6 +498,11 @@ export function Chat({
   const activeCommandMsgIdRef = useRef<string | null>(null);
   const activeCommandTypeRef = useRef<ActiveCommand>("none");
 
+  // DEBUG: Log state changes for activeCommandType to trace unexpected mounts
+  useEffect(() => {
+    logToFile(`[DEBUG][Chat] activeCommandType changed to: ${activeCommandType}`);
+  }, [activeCommandType]);
+
   const [completedResults, setCompletedResults] = useState<
     Map<
       string,
@@ -461,6 +521,7 @@ export function Chat({
     total: number;
   }>({ prompt: 0, completion: 0, total: 0 });
 
+  // ── Effects ──
   useEffect(() => {
     activeCommandMsgIdRef.current = activeCommandMsgId;
     activeCommandTypeRef.current = activeCommandType;
@@ -507,7 +568,10 @@ export function Chat({
 
   useEffect(() => {
     const saved = loadSelection();
-    if (saved) {
+    logToFile(`[DEBUG][Chat.useEffect] Initial loadSelection result: ${saved ? JSON.stringify(saved) : "NULL"}`);
+    
+    if (saved && saved.providerId && saved.modelId) {
+      // Force set to service
       chatService.setLastUsedModel({
         id: saved.modelId,
         providerId: saved.providerId,
@@ -516,27 +580,35 @@ export function Chat({
         id: saved.accountId || "",
         email: saved.email,
       });
+      
+      // Verify immediately after setting
+      logToFile(`[DEBUG][Chat.useEffect] After set - Service Model: ${JSON.stringify(chatService.getLastUsedModel())}`);
+      
+      // Notify parent about restored model/account status
       onModelAccountStatusChange?.({
-        hasModelAndAccount: !!(saved.modelId && saved.accountId),
+        hasModelAndAccount: true,
         providerName: saved.providerId,
         modelName: saved.modelId,
         email: saved.email || "-",
       });
+    } else {
+      // Explicitly clear if no valid selection found for this CWD
+      // This prevents stale UI showing old data while service is empty
+      chatService.setLastUsedModel(null);
+      chatService.setLastUsedAccount(null);
+      onModelAccountStatusChange?.({
+        hasModelAndAccount: false,
+        providerName: "-",
+        modelName: "-",
+        email: "-",
+      });
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [headerFocusLine, setHeaderFocusLine] = useState(0);
-  useInput((input, key) => {
-    if (!isActive || messages.length !== 0) return;
-    if (key.upArrow) {
-      setHeaderFocusLine((prev) => Math.max(0, prev - 1));
-    } else if (key.downArrow) {
-      setHeaderFocusLine((prev) => Math.min(1, prev + 1));
-    } else if (key.return && headerFocusLine === 0) {
-      handleSubmit("/model-account");
-    }
-  });
+  // Removed problematic useInput shortcut that intercepted Enter during message submission.
+  // Users can still manually type '/model-account' to open the selector.
 
+  // ── Callbacks ──
   const startCommand = useCallback(
     (cmd: ActiveCommand, rawInput: string) => {
       if (activeCommandTypeRef.current !== "none") return;
@@ -614,17 +686,19 @@ export function Chat({
       }
 
       if (activeCommandTypeRef.current !== "none") {
+        logToFile(`[DEBUG][Chat.handleSubmit] Closing active panel before sending message. Previous type: ${activeCommandTypeRef.current}`);
         setActiveCommandMsgId(null);
         setActiveCommandType("none");
       }
 
+      logToFile(`[DEBUG][Chat.handleSubmit] Sending message. Content length: ${trimmed.length}`);
       sendMessage({ content: trimmed });
     },
     [sendMessage, chatService, startCommand, resetSession],
   );
 
   const handleLoadConversation = useCallback(
-    async (conversationId: string): Promise<void> => {
+    async (conversationId: string): Promise<boolean> => {
       // Đóng panel history trước khi load
       if (activeCommandTypeRef.current === "history") {
         setActiveCommandMsgId(null);
@@ -645,6 +719,7 @@ export function Chat({
           },
         ]);
       }
+      return ok;
     },
     [resetSession, chatService],
   );
@@ -712,6 +787,16 @@ export function Chat({
 
   const hasAnyMessages = messages.filter((m) => !m.uiHidden).length > 0;
 
+  // DEBUG: Log render conditions for ModelAccount panel
+  const shouldRenderModelAccount = activeCommandType === "model-account" && 
+                                   !!activeCommandMsgId && 
+                                   !completedResults.has(activeCommandMsgId);
+  
+  useEffect(() => {
+    logToFile(`[DEBUG][Chat.Render] shouldRenderModelAccount=${shouldRenderModelAccount}, activeCommandType=${activeCommandType}, hasActiveMsgId=${!!activeCommandMsgId}, isCompleted=${activeCommandMsgId ? completedResults.has(activeCommandMsgId) : 'N/A'}`);
+  }, [shouldRenderModelAccount, activeCommandType, activeCommandMsgId, completedResults]);
+
+  // ── Render ──
   return (
     <Box flexDirection="column" flexGrow={1}>
       {/* Message list */}
@@ -811,116 +896,109 @@ export function Chat({
                       </Box>
                     )}
 
-                    <Box flexDirection="row">
-                      <Text>{"● "}</Text>
-                      <Box flexDirection="column" flexGrow={1}>
-                        {(() => {
-                          const blocks = msg.parsed?.contentBlocks;
-                          const hasBlocks =
-                            Array.isArray(blocks) && blocks.length > 0;
+                    {/* Text/bullet row — only rendered when there is visible content */}
+                    {(msg.content.trim().length > 0 ||
+                      (Array.isArray(msg.parsed?.contentBlocks) &&
+                        msg.parsed!.contentBlocks.length > 0)) && (
+                      <Box flexDirection="row">
+                        <Text>{"● "}</Text>
+                        <Box flexDirection="column" flexGrow={1}>
+                          {(() => {
+                            const blocks = msg.parsed?.contentBlocks;
+                            const hasBlocks =
+                              Array.isArray(blocks) && blocks.length > 0;
 
-                          if (hasBlocks) {
-                            return (
-                              <>
-                                {blocks.map((block: any, blockIdx: number) => {
-                                  try {
-                                    if (
-                                      block.type === "markdown" &&
-                                      typeof block.content === "string"
-                                    ) {
-                                      return (
-                                        <Box
-                                          key={`md-${blockIdx}`}
-                                          flexDirection="column"
-                                          marginBottom={1}
-                                        >
-                                          {block.content
-                                            .split("\n")
-                                            .map(
-                                              (line: string, lineIdx: number) => (
-                                                <Text key={lineIdx}>{line}</Text>
-                                              ),
-                                            )}
-                                        </Box>
-                                      );
-                                    } else if (
-                                      block.type === "code" &&
-                                      typeof block.content === "string"
-                                    ) {
-                                      return (
-                                        <Box
-                                          key={`code-${blockIdx}`}
-                                          flexDirection="column"
-                                          marginBottom={1}
-                                        >
-                                          <Text
-                                            dimColor
-                                          >{`\`\`${block.language || ""}`}</Text>
-                                          {block.content
-                                            .split("\n")
-                                            .map(
-                                              (line: string, lineIdx: number) => (
-                                                <Text key={lineIdx}>{line}</Text>
-                                              ),
-                                            )}
-                                          <Text dimColor>{"\`\`"}</Text>
-                                        </Box>
-                                      );
+                            if (hasBlocks) {
+                              return (
+                                <>
+                                  {blocks.map((block: any, blockIdx: number) => {
+                                    try {
+                                      if (
+                                        block.type === "markdown" &&
+                                        typeof block.content === "string"
+                                      ) {
+                                        return (
+                                          <Box
+                                            key={`md-${blockIdx}`}
+                                            flexDirection="column"
+                                          >
+                                            {block.content
+                                              .split("\n")
+                                              .map(
+                                                (
+                                                  line: string,
+                                                  lineIdx: number,
+                                                ) => (
+                                                  <Text key={lineIdx}>
+                                                    {line}
+                                                  </Text>
+                                                ),
+                                              )}
+                                          </Box>
+                                        );
+                                      } else if (
+                                        block.type === "code" &&
+                                        typeof block.content === "string"
+                                      ) {
+                                        return (
+                                          <Box
+                                            key={`code-${blockIdx}`}
+                                            flexDirection="column"
+                                          >
+                                            <Text
+                                              dimColor
+                                            >{`\`\`${block.language || ""}`}</Text>
+                                            {block.content
+                                              .split("\n")
+                                              .map(
+                                                (
+                                                  line: string,
+                                                  lineIdx: number,
+                                                ) => (
+                                                  <Text key={lineIdx}>
+                                                    {line}
+                                                  </Text>
+                                                ),
+                                              )}
+                                            <Text dimColor>{"\`\`"}</Text>
+                                          </Box>
+                                        );
+                                      }
+                                    } catch (e) {
+                                      console.error("Render block error:", e);
                                     }
-                                  } catch (e) {
-                                    console.error("Render block error:", e);
-                                  }
-                                  return null;
-                                })}
-
-                                {msg.parsed?.actions &&
-                                  msg.parsed.actions.length > 0 && (
-                                    <Box flexDirection="column" marginTop={1}>
-                                      {msg.parsed.actions.map(
-                                        (action: any, actionIdx: number) => (
-                                          <ToolRenderer
-                                            key={`${msg.id}-action-${actionIdx}`}
-                                            action={action}
-                                            actionIndex={actionIdx}
-                                            messageId={msg.id || String(i)}
-                                            isActionClicked={true}
-                                            toolOutputs={(msg as any).toolOutputs}
-                                          />
-                                        ),
-                                      )}
-                                    </Box>
-                                  )}
-                              </>
-                            );
-                          } else {
-                            return (
-                              <>
-                                {msg.content && msg.content.trim().length > 0 && (
-                                  <Text>{msg.content}</Text>
-                                )}
-                                {msg.parsed?.actions &&
-                                  msg.parsed.actions.length > 0 && (
-                                    <Box flexDirection="column" marginTop={1}>
-                                      {msg.parsed.actions.map(
-                                        (action: any, actionIdx: number) => (
-                                          <ToolRenderer
-                                            key={`${msg.id}-action-${actionIdx}`}
-                                            action={action}
-                                            actionIndex={actionIdx}
-                                            messageId={msg.id || String(i)}
-                                            isActionClicked={true}
-                                            toolOutputs={(msg as any).toolOutputs}
-                                          />
-                                        ),
-                                      )}
-                                    </Box>
-                                  )}
-                              </>
-                            );
-                          }
-                        })()}
+                                    return null;
+                                  })}
+                                </>
+                              );
+                            } else {
+                              return (
+                                <Text>{msg.content}</Text>
+                              );
+                            }
+                          })()}
+                        </Box>
                       </Box>
-                    </Box>
+                    )}
+
+                    {/* Tool actions — rendered as siblings of the bullet row so
+                        their ● aligns with the assistant-text ● (no extra indent) */}
+                    {msg.parsed?.actions && msg.parsed.actions.length > 0 && (
+                      <Box flexDirection="column">
+                        {msg.parsed.actions.map(
+                          (action: any, actionIdx: number) => (
+                            <ToolRenderer
+                              key={`${msg.id}-action-${actionIdx}`}
+                              action={action}
+                              actionIndex={actionIdx}
+                              messageId={msg.id || String(i)}
+                              isActionClicked={true}
+                              toolOutputs={(msg as any).toolOutputs}
+                            />
+                          ),
+                        )}
+                      </Box>
+                    )}
 
                     {isLatestAssistant && (
                       <GeneratingIndicator active={isStreaming} />
@@ -999,6 +1077,7 @@ export function Chat({
     </Box>
   );
 
+  // ── Internal Helper Functions ──
   function getStatusMessage(type: ActiveCommand): string {
     switch (type) {
       case "model-account":
@@ -1020,7 +1099,9 @@ export function Chat({
     }
   }
 
-  function handleCancelPanel(reason: "user_cancel" | "closed" | "done" = "user_cancel") {
+  function handleCancelPanel(
+    reason: "user_cancel" | "closed" | "done" = "user_cancel",
+  ) {
     if (activeCommandMsgIdRef.current) {
       setCompletedResults((prev) => {
         const next = new Map(prev);

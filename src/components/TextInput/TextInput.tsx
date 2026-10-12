@@ -1,7 +1,31 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
-import { Box, Text, useApp } from "ink";
-import { useImeInput } from "../../hooks/useImeInput";
+/**
+ * ------------------------------------------------------------------
+ * TextInput
+ * ------------------------------------------------------------------
+ * Ô nhập liệu tùy chỉnh hỗ trợ tiếng Việt (IME Composition) và các phím tắt
+ * đặc biệt (?, /, Ctrl+C, Esc) để điều hướng giao diện CLI.
+ *
+ * Main features:
+ * - Hỗ trợ gõ tiếng Việt Telex/VNI mượt mà nhờ useImeInput hook
+ * - Gõ "?" đầu tiên: Bật/tắt bảng phím tắt (ShortcutsHelp)
+ * - Gõ "/" đầu tiên: Bật/tắt danh sách lệnh (CommandList)
+ * - Ctrl+C/Esc: Xóa nội dung hoặc đếm ngược thoát ứng dụng
+ * - Tab: Chuyển đổi chế độ suy nghĩ (Thinking Mode)
+ * - Trạng thái kết nối: Đổi màu prompt và chặn gửi khi mất mạng
+ * ------------------------------------------------------------------
+ */
 
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── React ──
+import React, { useState, useCallback, useEffect, useRef } from "react";
+
+// ── UI ─
+import { Box, Text, useApp } from "ink";
+
+// ── Hooks ──
+import { useImeInput } from "../../hooks/useImeInput.js";
+
+// ─── Interfaces ────────────────────────────────────────────────────────
 interface TextInputProps {
   onSubmit: (value: string) => void;
   placeholder?: string;
@@ -15,18 +39,7 @@ interface TextInputProps {
   onExitStateChange?: (countdown: number | null) => void;
 }
 
-/**
- * Custom text input with IME composition support for Vietnamese/CJK keyboards.
- *
- * Replaces @inkjs/ui TextInput which doesn't handle IME composition events,
- * causing characters to leak outside the input when typing Vietnamese (Telex/VNI).
- * Uses useImeInput hook that buffers keystrokes during composition and only
- * commits after a timeout or explicit submit.
- *
- * Typing "?" as the very first character toggles the shortcuts help panel.
- * Typing "/" as the very first character toggles the command list panel.
- * Typing "?" or "/" again at position 0 hides the respective panel.
- */
+// ─── Component ──────────────────────────────────────────────────────────
 export function TextInput({
   onSubmit,
   placeholder,
@@ -36,12 +49,18 @@ export function TextInput({
   onToggleThinking,
   onExitStateChange,
 }: TextInputProps): React.JSX.Element {
+  // ── App Context ──
   const { exit } = useApp();
+
+  // ── State ─
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
   const [exitCountdown, setExitCountdown] = useState<number | null>(null);
+  
+  // ── Refs ──
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Effects ─
   // Sync countdown state to parent
   useEffect(() => {
     onExitStateChange?.(exitCountdown);
@@ -50,10 +69,12 @@ export function TextInput({
   // Cleanup interval on unmount
   useEffect(() => {
     return () => {
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      if (countdownIntervalRef.current)
+        clearInterval(countdownIntervalRef.current);
     };
   }, []);
 
+  // ── Callbacks ──
   const performExit = useCallback(() => {
     if (countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current);
@@ -64,11 +85,12 @@ export function TextInput({
   }, [exit]);
 
   const startExitCountdown = useCallback(() => {
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    
+    if (countdownIntervalRef.current)
+      clearInterval(countdownIntervalRef.current);
+
     let secondsLeft = 3;
     setExitCountdown(secondsLeft);
-    
+
     countdownIntervalRef.current = setInterval(() => {
       secondsLeft -= 1;
       if (secondsLeft <= 0) {
@@ -155,6 +177,7 @@ export function TextInput({
     ],
   );
 
+  // ── IME Hook Integration ──
   const { value, isComposing, clearValue } = useImeInput({
     onSubmit: handleSubmitWithToggle,
     onChange: handleChange,
@@ -203,6 +226,7 @@ export function TextInput({
     },
   });
 
+  // ── Derived ──
   // Display value as-is — "?" and "/" are only stripped when they are the sole character (toggle triggers)
   const displayText = value || (isComposing ? "" : "");
   const effectivePlaceholder = !isConnected
@@ -217,11 +241,14 @@ export function TextInput({
 
   const promptColor = isConnected ? "cyan" : "red";
 
+  // ── Render ──
   return (
     <Box paddingX={0}>
       <Text color={promptColor}>{isConnected ? "❯ " : "> "}</Text>
       {showPlaceholder ? (
-        <Text color={!isConnected ? "red" : undefined} dimColor={isConnected}>{effectivePlaceholder}</Text>
+        <Text color={!isConnected ? "red" : undefined} dimColor={isConnected}>
+          {effectivePlaceholder}
+        </Text>
       ) : (
         <Text>{displayText}</Text>
       )}

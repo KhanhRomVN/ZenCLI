@@ -18,19 +18,19 @@
 
 import { EventEmitter } from "events";
 import * as os from "os";
-import type { Message, QuestionAnswer } from "../types/message";
-import { parseAIResponse } from "../parsers/ResponseParser";
-import { StreamingService } from "./StreamingService";
-import { processClaudeContent } from "./ClaudeContentProcessor";
-import type { ToolAction, ParsedResponse } from "../parsers/ResponseParser";
-import { combinePromptsForMode } from "../prompts";
-import type { SystemPromptMode, PromptLengthMode } from "../prompts";
-import type { SystemInfo } from "../prompts/system-context";
-import { buildSkillsSection } from "./SkillService";
-import { logToFile } from "./api";
+import type { Message, QuestionAnswer } from "../types/message.js";
+import { parseAIResponse } from "../parsers/ResponseParser.js";
+import { StreamingService } from "./StreamingService.js";
+import { processClaudeContent } from "./ClaudeContentProcessor.js";
+import type { ToolAction, ParsedResponse } from "../parsers/ResponseParser.js";
+import { combinePromptsForMode } from "../prompts/index.js";
+import type { SystemPromptMode, PromptLengthMode } from "../prompts/index.js";
+import type { SystemInfo } from "../prompts/system-context.js";
+import { buildSkillsSection } from "./SkillService.js";
+import { logToFile } from "./logger.js";
 import * as fs from "fs";
 import * as path from "path";
-import { PathService } from "./PathService";
+import { PathService } from "./PathService.js";
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -220,10 +220,12 @@ export class ChatService extends EventEmitter {
   // ─── Setters ──────────────────────────────────────────────────────────
 
   setLastUsedModel(model: { id: string; providerId: string } | null): void {
+    logToFile(`[DEBUG][ChatService.setLastUsedModel] Setting model to: ${JSON.stringify(model)}`);
     this.lastUsedModel = model;
   }
 
   setLastUsedAccount(account: { id: string; email?: string } | null): void {
+    logToFile(`[DEBUG][ChatService.setLastUsedAccount] Setting account to: ${JSON.stringify(account)}`);
     this.lastUsedAccount = account;
   }
 
@@ -264,6 +266,11 @@ export class ChatService extends EventEmitter {
     this.setProcessing(false);
     this.setStreaming(false);
     this.setContinuing(false);
+    
+    // Emit signal to parent (Phantoma) that session has been reset/cleared
+    // This allows the UI to clear any stored conversation ID for auto-resume
+    process.stderr.write("\x1b[0m[PHANTOMA_RESET]\n");
+
     this.emit("messagesUpdated", []);
     this.emit("conversationIdChanged", "");
   }
@@ -371,6 +378,13 @@ export class ChatService extends EventEmitter {
     let finalModel = model || this.lastUsedModel;
     let finalAccount = account || this.lastUsedAccount;
 
+    // [DEBUG] Log model/account resolution state
+    logToFile(`[DEBUG][ChatService.sendMessage] cwd=${process.cwd()}`);
+    logToFile(`[DEBUG][ChatService.sendMessage] model param=${JSON.stringify(model)}, lastUsedModel=${JSON.stringify(this.lastUsedModel)}`);
+    logToFile(`[DEBUG][ChatService.sendMessage] account param=${JSON.stringify(account)}, lastUsedAccount=${JSON.stringify(this.lastUsedAccount)}`);
+    logToFile(`[DEBUG][ChatService.sendMessage] resolved finalModel=${JSON.stringify(finalModel)}, finalAccount=${JSON.stringify(finalAccount)}`);
+    logToFile(`[DEBUG][ChatService.sendMessage] skipFirstRequestLogic=${skipFirstRequestLogic}, isReq1=${filteredMessages.length === 0 && !skipFirstRequestLogic}`);
+
     // History fallback for fresh session
     if (!finalModel) {
       const lastMetadataMsg = [...filteredMessages]
@@ -472,6 +486,10 @@ export class ChatService extends EventEmitter {
     await this.persistConversation();
     
     this.setProcessing(true);
+
+    // ── NEW: Notify Phantoma that agent is now RUNNING ──
+    console.log("[DEBUG_ZENCLI] Sending PHANTOMA_STATUS active=true to stderr");
+    process.stderr.write("\x1b[0m[PHANTOMA_STATUS] active=true\n");
 
     try {
       // Prepare messages for API.
@@ -607,6 +625,10 @@ export class ChatService extends EventEmitter {
       this.setProcessing(false);
       this.setStreaming(false);
       this.abortController = null;
+
+      // ── NEW: Notify Phantoma that agent is now IDLE (response complete) ──
+      console.log("[DEBUG_ZENCLI] Sending PHANTOMA_STATUS active=false to stderr");
+      process.stderr.write("\x1b[0m[PHANTOMA_STATUS] active=false\n");
 
       // Parse response
       let parsed: ParsedResponse | null = null;
@@ -802,13 +824,9 @@ export class ChatService extends EventEmitter {
           totalTokenUsage: 0, // TODO: Aggregate tokens from messages if tracked
           sourceEnvironment: this._sourceEnvironment,
         },
-        messages: this.messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-          timestamp: m.timestamp,
-          providerId: (m as any).providerId,
-          modelId: (m as any).modelId,
-        })),
+        // Lưu trọn vẹn message (bao gồm parsed, thinking, toolOutputs…)
+        // để khi resume history không phải parse lại từ đầu.
+        messages: this.messages.map((m) => ({ ...m })),
       };
 
       await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
@@ -853,14 +871,31 @@ export class ChatService extends EventEmitter {
         .map((m, i) => {
           // Sinh ID duy nhất nếu thiếu, dùng timestamp cơ sở + index để đảm bảo unique
           const baseTs = Date.now();
-          return {
+          const content = String(m.content || "");
+          const msg: any = {
             ...m,
             id: m.id || `conv-${baseTs}-${i}`,
-            // Đảm bảo content là string
-            content: String(m.content || ""),
+            content,
             // Giữ nguyên timestamp nếu có, nếu không thì dùng hiện tại
             timestamp: m.timestamp || baseTs,
           };
+
+          // Conversation cũ (persist trước khi lưu trọn message) không có field
+          // `parsed` → UI sẽ render raw XML tags. Re-parse ngay lúc load cho
+          // assistant message thiếu parsed để khôi phục contentBlocks/actions.
+          if (
+            msg.role === "assistant" &&
+            (!msg.parsed || !Array.isArray(msg.parsed.contentBlocks)) &&
+            content.trim().length > 0
+          ) {
+            try {
+              msg.parsed = parseAIResponse(content);
+            } catch (e: any) {
+              logToFile(`[LOAD_CONV] Re-parse failed for ${msg.id}: ${e.message}`);
+            }
+          }
+
+          return msg as Message;
         });
 
       logToFile(`[LOAD_CONV] Parsed ${rawMessages.length} raw msgs, kept ${restoredMessages.length} valid msgs for ${conversationId}`);
@@ -898,6 +933,10 @@ export class ChatService extends EventEmitter {
 
       this.emit("messagesUpdated", restoredMessages);
       this.emit("conversationIdChanged", conversationId);
+
+      // ── NEW: Notify Phantoma that agent is ready (IDLE) after resume ──
+      // This ensures the badge appears even if no new message is sent immediately.
+      process.stderr.write("\x1b[0m[PHANTOMA_STATUS] active=false\n");
 
       logToFile(
         `[LOAD_CONV] Restored ${restoredMessages.length} messages for ${conversationId}`,

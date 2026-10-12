@@ -1,21 +1,25 @@
 /**
  * ------------------------------------------------------------------
- * useImeInput — IME-aware input hook for Ink terminal
+ * useImeInput Hook
  * ------------------------------------------------------------------
- * Handles Vietnamese/CJK IME composition in terminal environments
- * where Ink's useInput doesn't distinguish between composed and
- * committed characters.
+ * Xử lý nhập liệu tiếng Việt/CJK (IME Composition) trong môi trường Terminal.
+ * Giải quyết vấn đề Ink.js không phân biệt được ký tự đang ghép (composing) và ký tự đã chốt (committed).
  *
- * Strategy:
- * - Buffers keystrokes during composition (detected via timeout gap)
- * - Commits buffered text after COMPOSITION_TIMEOUT ms of silence
- * - Immediate submit on Enter bypasses the buffer
+ * Chiến lược:
+ * - Buffer hóa các phím bấm trong quá trình ghép chữ
+ * - Chốt nội dung sau khoảng im lặng nhất định (COMPOSITION_TIMEOUT)
+ * - Cho phép Submit ngay lập tức khi nhấn Enter, bỏ qua buffer
  * ------------------------------------------------------------------
  */
 
+// ─── Imports ───────────────────────────────────────────────────────────
+// ── React ──
 import { useState, useCallback, useRef, useEffect } from "react";
+
+// ── UI ──
 import { useInput } from "ink";
 
+// ─── Interfaces ───────────────────────────────────────────────────────
 interface UseImeInputOptions {
   onSubmit: (value: string) => void;
   onChange?: (value: string) => void;
@@ -32,8 +36,10 @@ interface UseImeInputResult {
   clearValue: () => void;
 }
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const COMPOSITION_TIMEOUT = 800; // ms — wait before committing IME buffer
 
+// ─── Hook ───────────────────────────────────────────────────────────────
 export function useImeInput({
   onSubmit,
   onChange,
@@ -41,10 +47,14 @@ export function useImeInput({
   onCtrlC,
   onEsc,
 }: UseImeInputOptions): UseImeInputResult {
+  // ── State ──
   const [value, setValue] = useState("");
   const [isComposing, setIsComposing] = useState(false);
+  
+  // ── Refs ──
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Callbacks ──
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -62,11 +72,13 @@ export function useImeInput({
     [onSubmit],
   );
 
+  // ── Effects ──
   // Cleanup timer on unmount
   useEffect(() => {
     return () => clearTimer();
   }, [clearTimer]);
 
+  // ── Handlers ──
   useInput((input, key) => {
     // Enter submits immediately
     if (key.return) {

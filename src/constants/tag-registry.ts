@@ -1,9 +1,19 @@
 /**
- * Unified Tag Registry for ZenCLI.
- * Adapted from Zen constants.ts — removed React/lucide imports.
- * This is the single source of truth for all tool and UI tag definitions.
+ * ------------------------------------------------------------------
+ * Tag Registry & Constants
+ * ------------------------------------------------------------------
+ * Nguồn duy nhất (Single Source of Truth) định nghĩa tất cả các Tool và UI Tag.
+ * Chứa thông tin về quyền hạn (permissions), thời gian chờ (timeout) và tính năng đặc thù.
+ *
+ * Main exports:
+ * - TAG_REGISTRY       : Map cấu hình chi tiết cho từng loại tag
+ * - EXECUTION_STATUS   : Enum trạng thái chạy tool (Idle, Running, Error, Done)
+ * - Helper Functions   : Truy vấn thuộc tính tag (getToolLabel, requiresConfirmation...)
+ * ------------------------------------------------------------------
  */
 
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Types ─
 import type {
   PermissionMode,
   PermissionValue,
@@ -12,7 +22,7 @@ import type {
   ToolType,
   UITagType,
   TagType,
-} from "../types/tag-types";
+} from "../types/tag-types.js";
 
 // Re-export types for convenience
 export type {
@@ -25,6 +35,7 @@ export type {
   TagType,
 };
 
+// ─── Constants ──────────────────────────────────────────────────────────
 // ===== EXECUTION STATUS =====
 export const EXECUTION_STATUS = {
   IDLE: "idle",
@@ -186,8 +197,7 @@ export const TAG_REGISTRY: Record<string, TagDefinition> = {
   question: { id: "question", title: "QUESTION", category: "ui" },
 };
 
-// ============= HELPER FUNCTIONS =============
-
+// ─── Helper Functions ───────────────────────────────────────────────────
 export const getTagDef = (type: string): TagDefinition | undefined => {
   return TAG_REGISTRY[type];
 };

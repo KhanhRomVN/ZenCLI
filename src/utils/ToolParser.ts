@@ -1,5 +1,21 @@
-import { decodeHtmlEntities } from "./HtmlEntitiesDecoder";
+/**
+ * ------------------------------------------------------------------
+ * Generic Tool Parser
+ * ------------------------------------------------------------------
+ * Hàm trích xuất giá trị tham số từ chuỗi XML thô một cách cân bằng (balanced parsing).
+ * Hỗ trợ xử lý nesting tag và bảo toàn khoảng trắng/nội dung multiline cho các field đặc biệt.
+ *
+ * Main functions:
+ * - extractParamValue() : Lấy nội dung giữa cặp thẻ mở/đóng tương ứng với paramName
+ * - parseToolAction()   : Placeholder cho logic parse chung (hiện tại delegate sang parser riêng)
+ * ------------------------------------------------------------------
+ */
 
+// ─── Imports ───────────────────────────────────────────────────────────
+// ── Utils ──
+import { decodeHtmlEntities } from "./HtmlEntitiesDecoder.js";
+
+// ─── Constants ─────────────────────────────────────────────────────────
 /**
  * Params that carry multi-line file content — must NOT be trimmed so that
  * leading/trailing newlines (which are meaningful code lines) are preserved
@@ -16,6 +32,7 @@ export const CONTENT_PARAMS = new Set([
   "new",
 ]);
 
+// ─── Functions ─────────────────────────────────────────────────────────
 export const extractParamValue = (
   content: string,
   paramName: string,

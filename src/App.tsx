@@ -1,14 +1,25 @@
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+} from "react";
 import { Box, Text, useStdout } from "ink";
-import { Chat } from "./components/Chat";
-import { WelcomeSection } from "./components/WelcomeSection";
-import { TextInput } from "./components/TextInput/TextInput";
-import { ShortcutsHelp } from "./components/TextInput/ShortcutsHelp";
-import { CommandList } from "./components/TextInput/CommandList";
-import { useBackendHealth } from "./hooks/useBackendHealth";
-import type { RuntimeFlags } from "./services/ChatService";
-import type { SystemPromptMode, PromptLengthMode } from "./prompts";
-import { loadSettings, saveSettings } from "./services/SettingService";
+import { Chat } from "./components/Chat.js";
+import { WelcomeSection } from "./components/WelcomeSection.js";
+import { TextInput } from "./components/TextInput/TextInput.js";
+import { ShortcutsHelp } from "./components/TextInput/ShortcutsHelp.js";
+import { CommandList } from "./components/TextInput/CommandList.js";
+import { useBackendHealth } from "./hooks/useBackendHealth.js";
+import type { RuntimeFlags } from "./services/ChatService.js";
+import type { SystemPromptMode, PromptLengthMode } from "./prompts/index.js";
+import { loadSettings, saveSettings } from "./services/SettingService.js";
+interface ResumedBannerInfo {
+  id: string;
+  title: string;
+  messageCount: number;
+}
 
 /**
  * Root application component — manages top-level layout.
@@ -76,6 +87,73 @@ export function App(): React.JSX.Element {
     total: number;
   }>({ prompt: 0, completion: 0, total: 0 });
   const [inlinePanelOpen, setInlinePanelOpen] = useState(false);
+  const [resumedBanner, setResumedBanner] = useState<ResumedBannerInfo | null>(
+    null,
+  );
+  const autoResumeDoneRef = useRef(false);
+
+  // Callback ref to access Chat's handlers from App level
+  const [chatHandlers, setChatHandlers] = useState<{
+    handleSubmit: (value: string) => void;
+    /** Load conversation by ID. Returns true if successful, false otherwise. */
+    handleLoadConversation: (conversationId: string) => Promise<boolean>;
+    handleModelSelect: (selection: {
+      providerId: string;
+      modelId: string;
+      accountId?: string;
+    }) => void;
+    handleResetSession: () => void;
+  } | null>(null);
+
+  // ── Auto-resume: load conversation cuối cùng đã chat thật sự khi boot ──
+  // Chạy 1 lần duy nhất sau khi Chat component report handlers ready.
+  // Ưu tiên:
+  //   1. Forced ID từ --resume <id> (env ZEN_FORCED_CONVERSATION_ID)
+  //   2. Auto-detect latest active conversation (≥1 user msg)
+  // Bỏ qua nếu có flag --no-resume / env ZEN_NO_RESUME=1
+  useEffect(() => {
+    if (!chatHandlers || autoResumeDoneRef.current) return;
+    autoResumeDoneRef.current = true;
+
+    // Escape hatch qua CLI arg hoặc env var
+    const noResumeFlag =
+      process.argv.includes("--no-resume") ||
+      process.argv.includes("-nr") ||
+      process.env.ZEN_NO_RESUME === "1";
+    if (noResumeFlag) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        // Chỉ resume khi được yêu cầu RÕ RÀNG qua --resume <id> (env ZEN_FORCED_CONVERSATION_ID).
+        // Không auto-detect latest conversation nữa — `zen-cli` không tham số = session mới trắng.
+        const forcedId = process.env.ZEN_FORCED_CONVERSATION_ID;
+        if (forcedId) {
+          const ok = await chatHandlers.handleLoadConversation(forcedId);
+          if (ok && !cancelled) {
+            setResumedBanner({
+              id: forcedId,
+              title: "(Restored from binding)",
+              messageCount: 0,
+            });
+          }
+        }
+      } catch {
+        // Silent fail — user vẫn có thể dùng /history thủ công
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chatHandlers, workspacePath]);
+
+  // Tự ẩn banner sau 6 giây
+  useEffect(() => {
+    if (!resumedBanner) return;
+    const timer = setTimeout(() => setResumedBanner(null), 6000);
+    return () => clearTimeout(timer);
+  }, [resumedBanner]);
 
   // Runtime Config States
   const initialSettings = useMemo(() => loadSettings(), []);
@@ -99,24 +177,10 @@ export function App(): React.JSX.Element {
     setThinkingEnabled((prev) => !prev);
   }, []);
 
-  // Callback ref to access Chat's handlers from App level
-  const [chatHandlers, setChatHandlers] = useState<{
-    handleSubmit: (value: string) => void;
-    handleLoadConversation: (conversationId: string) => void;
-    handleModelSelect: (selection: {
-      providerId: string;
-      modelId: string;
-      accountId?: string;
-    }) => void;
-    handleResetSession: () => void;
-  } | null>(null);
-
   const handleSubmit = useCallback(
     (value: string): void => {
       const trimmed = value.trim();
       if (trimmed.length === 0) return;
-
-      console.log("[DEBUG APP] Submitting:", trimmed);
 
       // Forward ALL inputs (including slash commands) to Chat
       setCommandsVisible(false);
@@ -145,6 +209,20 @@ export function App(): React.JSX.Element {
           email={modelInfo.email}
           workspacePath={workspacePath}
         />
+
+        {/* Auto-resume notification banner */}
+        {resumedBanner && (
+          <Box paddingX={1} marginBottom={1}>
+            <Text color="green" dimColor>
+              ↻ Resumed{" "}
+              <Text bold color="white">
+                "{resumedBanner.title}"
+              </Text>{" "}
+              ({resumedBanner.messageCount} messages) · /new to start fresh
+            </Text>
+          </Box>
+        )}
+
         <Chat
           isActive={true}
           onHandlersReady={setChatHandlers}

@@ -1,13 +1,35 @@
+/**
+ * ------------------------------------------------------------------
+ * Model & Account Selector
+ * ------------------------------------------------------------------
+ * Wizard ba bước để lựa chọn Provider -> Model -> Account trong giao diện CLI.
+ * Hỗ trợ điều hướng bằng bàn phím và hiển thị thông tin chi tiết của từng mục.
+ *
+ * Main features:
+ * - Bước 1: Chọn nhà cung cấp AI (Provider)
+ * - Bước 2: Chọn mô hình (Model) và mức độ nỗ lực (Effort Level) nếu có
+ * - Bước 3: Chọn tài khoản đăng nhập (Account) tương ứng
+ * - Hiển thị mô tả ngắn gọn: Context length, tính năng đặc biệt, quota...
+ * - Phím tắt: Enter để xác nhận/chuyển bước, Esc/Ctrl+C để quay lui/hủy
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── React ─
 import React, { useState, useEffect } from "react";
+
+// ── UI ──
 import { Box, Text, useInput } from "ink";
+
+// ── Services ──
 import {
   fetchProviders,
   fetchAccounts,
-  logToFile,
   type Provider,
   type Account,
-} from "../services/api";
-
+} from "../services/api.js";
+import { logToFile } from "../services/logger.js";
+// ─── Types & Interfaces ────────────────────────────────────────────────
 interface ModelAccountProps {
   isOpen: boolean;
   onClose: () => void;
@@ -25,7 +47,11 @@ type Step = "provider" | "model" | "account";
 const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
 type EffortLevel = (typeof EFFORT_LEVELS)[number];
 
-function splitModelAndEffort(modelId: string): { base: string; effort: EffortLevel | null } {
+// ─── Helpers ────────────────────────────────────────────────────────────
+function splitModelAndEffort(modelId: string): {
+  base: string;
+  effort: EffortLevel | null;
+} {
   for (const lvl of EFFORT_LEVELS) {
     if (modelId.endsWith(`-${lvl}`)) {
       return { base: modelId.slice(0, -(lvl.length + 1)), effort: lvl };
@@ -51,11 +77,12 @@ function getItemDescription(step: Step, item: unknown): string {
     const m = item as any;
     const parts: string[] = [];
     if (m.max_context_length != null) {
-      const ctx = m.max_context_length >= 1_000_000
-        ? `${(m.max_context_length / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`
-        : m.max_context_length >= 1_000
-          ? `${Math.round(m.max_context_length / 1_000)}K`
-          : String(m.max_context_length);
+      const ctx =
+        m.max_context_length >= 1_000_000
+          ? `${(m.max_context_length / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`
+          : m.max_context_length >= 1_000
+            ? `${Math.round(m.max_context_length / 1_000)}K`
+            : String(m.max_context_length);
       parts.push(`${ctx} ctx`);
     }
     if (m.is_thinking) parts.push("Thinking");
@@ -64,30 +91,34 @@ function getItemDescription(step: Step, item: unknown): string {
     if (m.is_video_upload) parts.push("Video");
     if (m.is_deep_research) parts.push("Research");
     if (m.success_rate != null) parts.push(`${m.success_rate.toFixed(0)}% ok`);
-    return parts.length > 0 ? parts.join(" · ") : (m.description || "No details");
+    return parts.length > 0 ? parts.join(" · ") : m.description || "No details";
   }
   // account
   const a = item as Account;
   const parts: string[] = [];
-  if (a.period_requests != null) parts.push(`${a.period_requests.toLocaleString()} req`);
+  if (a.period_requests != null)
+    parts.push(`${a.period_requests.toLocaleString()} req`);
   if (a.period_tokens != null) {
-    const t = a.period_tokens >= 1_000_000
-      ? `${(a.period_tokens / 1_000_000).toFixed(1)}M`
-      : a.period_tokens >= 1_000
-        ? `${(a.period_tokens / 1_000).toFixed(1)}k`
-        : String(a.period_tokens);
+    const t =
+      a.period_tokens >= 1_000_000
+        ? `${(a.period_tokens / 1_000_000).toFixed(1)}M`
+        : a.period_tokens >= 1_000
+          ? `${(a.period_tokens / 1_000).toFixed(1)}k`
+          : String(a.period_tokens);
     parts.push(`${t} tokens`);
   }
   if (a.auth_method) parts.push(a.auth_method);
-  return parts.length > 0 ? parts.join(" · ") : (a.email || a.name || "No info");
+  return parts.length > 0 ? parts.join(" · ") : a.email || a.name || "No info";
 }
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const STEP_DESCRIPTIONS: Record<Step, string> = {
   provider: "Choose an AI provider to use for this session.",
   model: "Pick a model from the selected provider.",
   account: "Select which account credentials to authenticate with.",
 };
 
+// ─── Component ──────────────────────────────────────────────────────────
 /**
  * Three-step wizard for selecting provider → model → account.
  * Uses Ink's useInput for keyboard navigation in terminal.
@@ -97,25 +128,37 @@ export function ModelAccount({
   onClose,
   onSelect,
 }: ModelAccountProps): React.JSX.Element | null {
+  // ── State ──
   const [step, setStep] = useState<Step>("provider");
   const [providers, setProviders] = useState<Provider[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(
+    null,
+  );
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [cursorIndex, setCursorIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [effortOptions, setEffortOptions] = useState<EffortLevel[]>([]);
   const [effortIndex, setEffortIndex] = useState(0);
-  const [selectedModel, setSelectedModel] = useState<{ id: string; provider_id: string } | null>(null);
+  const [selectedModel, setSelectedModel] = useState<{
+    id: string;
+    provider_id: string;
+  } | null>(null);
 
+  // ── Effects ─
   // Fetch providers on mount
   useEffect(() => {
+    logToFile(`[DEBUG][ModelAccount.Effect] isOpen=${isOpen}, triggering effect`);
     if (!isOpen) return;
+    logToFile("[DEBUG][ModelAccount] Mounting - fetching providers");
     setLoading(true);
     fetchProviders()
       .then((data) => {
-        setProviders(data.filter((p) => p.is_enabled));
+        const enabled = data.filter((p) => p.is_enabled);
+        logToFile(`[DEBUG][ModelAccount] Providers fetched: total=${data.length}, enabled=${enabled.length}`);
+        setProviders(enabled);
       })
-      .catch(() => {
+      .catch((err) => {
+        logToFile(`[ERROR][ModelAccount] Failed to fetch providers: ${err.message}`);
         setProviders([]);
       })
       .finally(() => {
@@ -125,9 +168,8 @@ export function ModelAccount({
 
   // Fetch accounts when model is selected
   useEffect(() => {
-    logToFile(`ModelAccount useEffect[accounts]: step=${step}, selectedProvider=${selectedProvider?.provider_id ?? "(null)"}, accounts.length=${accounts.length}`);
-
     if (step === "account" && selectedProvider) {
+      logToFile(`[DEBUG][ModelAccount] Fetching accounts for provider: ${selectedProvider.provider_id}`);
       setLoading(true);
       fetchAccounts({ providerId: selectedProvider.provider_id })
         .then((resp) => {
@@ -137,11 +179,11 @@ export function ModelAccount({
             a.is_enabled === undefined ? true : Boolean(a.is_enabled);
 
           const filtered = data.filter(isEnabled);
-          logToFile(`ModelAccount accounts raw count=${data.length}, after is_enabled filter=${filtered.length}, sample=${JSON.stringify(data.slice(0, 2)).slice(0, 500)}`);
-
+          logToFile(`[DEBUG][ModelAccount] Accounts fetched: total=${data.length}, enabled=${filtered.length}`);
           setAccounts(filtered);
         })
-        .catch(() => {
+        .catch((err) => {
+          logToFile(`[ERROR][ModelAccount] Failed to fetch accounts: ${err.message}`);
           setAccounts([]);
         })
         .finally(() => {
@@ -163,9 +205,14 @@ export function ModelAccount({
     }
   }, [isOpen]);
 
+  // ── Callbacks ──
   const submitSelection = (sessionOnly: boolean) => {
-    if (!selectedProvider || !selectedModel) return;
+    if (!selectedProvider || !selectedModel) {
+      logToFile(`[WARN][ModelAccount] Submit skipped: missing provider or model`);
+      return;
+    }
     const selectedAccount = accounts[cursorIndex];
+    logToFile(`[DEBUG][ModelAccount] Submitting selection: provider=${selectedProvider.provider_id}, model=${selectedModel.id}, account=${selectedAccount?.id ?? 'none'}, sessionOnly=${sessionOnly}`);
     onSelect({
       providerId: selectedProvider.provider_id,
       modelId: selectedModel.id,
@@ -175,11 +222,10 @@ export function ModelAccount({
     });
   };
 
+  // ── Handlers ──
   // Keyboard navigation
   useInput((input, key) => {
     if (!isOpen) return;
-
-    logToFile(`ModelAccount useInput: input=${JSON.stringify(input)}, escape=${key.escape}, return=${key.return}, step=${step}, cursorIndex=${cursorIndex}`);
 
     // Esc / Ctrl+C: cùng hành vi — quay lại step trước hoặc đóng panel
     const isCancelKey = key.escape || (input === "c" && key.ctrl);
@@ -245,33 +291,43 @@ export function ModelAccount({
 
     if (key.return) {
       if (step === "provider" && providers[cursorIndex]) {
+        logToFile(`[DEBUG][ModelAccount] Selected provider: ${providers[cursorIndex].provider_id}`);
         setSelectedProvider(providers[cursorIndex]);
         setStep("model");
         setCursorIndex(0);
       } else if (step === "model" && selectedProvider?.models[cursorIndex]) {
+        logToFile(`[DEBUG][ModelAccount] Selected model index: ${cursorIndex}, id: ${selectedProvider.models[cursorIndex].id}`);
         const model = selectedProvider.models[cursorIndex];
         const { base, effort } = splitModelAndEffort(model.id);
         const uniqueEfforts = Array.from(
           new Set(
             selectedProvider.models
               .map((m) => splitModelAndEffort(m.id))
-              .filter((parsed) => parsed.base === base && parsed.effort !== null)
+              .filter(
+                (parsed) => parsed.base === base && parsed.effort !== null,
+              )
               .map((parsed) => parsed.effort as EffortLevel),
           ),
-        ).sort(
-          (a, b) => EFFORT_LEVELS.indexOf(a) - EFFORT_LEVELS.indexOf(b),
-        );
+        ).sort((a, b) => EFFORT_LEVELS.indexOf(a) - EFFORT_LEVELS.indexOf(b));
 
-        setSelectedModel({ id: base, provider_id: selectedProvider.provider_id });
+        setSelectedModel({
+          id: base,
+          provider_id: selectedProvider.provider_id,
+        });
 
         if (uniqueEfforts.length > 1) {
           setEffortOptions(uniqueEfforts);
-          setEffortIndex(Math.max(0, uniqueEfforts.indexOf(effort ?? "medium")));
+          setEffortIndex(
+            Math.max(0, uniqueEfforts.indexOf(effort ?? "medium")),
+          );
           return;
         }
 
         const finalId = effort ? `${base}-${effort}` : base;
-        setSelectedModel({ id: finalId, provider_id: selectedProvider.provider_id });
+        setSelectedModel({
+          id: finalId,
+          provider_id: selectedProvider.provider_id,
+        });
         setStep("account");
         setCursorIndex(0);
       } else if (step === "account") {
@@ -287,11 +343,12 @@ export function ModelAccount({
 
   if (!isOpen) return null;
 
+  // ── Derived ──
   const currentItems =
     step === "provider"
       ? providers
       : step === "model"
-        ? selectedProvider?.models ?? []
+        ? (selectedProvider?.models ?? [])
         : accounts;
 
   const title =
@@ -327,6 +384,7 @@ export function ModelAccount({
         ? "Enter to set as default · Esc or Ctrl+C to return provider"
         : "Enter to set as default · Esc or Ctrl+C to return model";
 
+  // ── Render ─
   return (
     <Box flexDirection="column">
       <Box flexDirection="column">
@@ -340,7 +398,10 @@ export function ModelAccount({
           {currentItems.map((item, i) => {
             const label =
               step === "account"
-                ? (item as Account).email || (item as Account).name || (item as any).id || ""
+                ? (item as Account).email ||
+                  (item as Account).name ||
+                  (item as any).id ||
+                  ""
                 : (item as any).name ||
                   (item as any).provider_name ||
                   (item as any).id ||
@@ -367,7 +428,9 @@ export function ModelAccount({
                   </Text>
                 </Box>
                 <Box width={30}>
-                  <Text color={labelColor} wrap="truncate-end">{label}</Text>
+                  <Text color={labelColor} wrap="truncate-end">
+                    {label}
+                  </Text>
                 </Box>
                 <Text color={descColor}>{description}</Text>
               </Box>

@@ -1,4 +1,4 @@
-import { extractParamValue } from "../../utils/ToolParser";
+import { extractParamValue } from "../../utils/ToolParser.js";
 
 export interface RevertFileParams {
   file_path: string;
